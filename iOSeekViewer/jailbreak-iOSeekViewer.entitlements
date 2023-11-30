@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    
+    <key>platform-application</key>
+        <true/>
+
+    <key>get-task-allow</key>
+    <true/>
+
+    <key>com.apple.security.exception.iokit-user-client-class</key>
+    <array>
+        <string>AppleUSBHostDeviceUserClient</string>
+        <string>AppleUSBHostInterfaceUserClient</string>
+    </array>
+
+    <key>com.apple.system.diagnostics.iokit-properties</key>
+    <true/>
+    
+    <key>com.apple.security.exception.process-info</key>
+    <true/>
+    
+    <key>seatbelt-profiles</key>
+    <array>
+        <string>debugserver</string>
+    </array>
+    
+    <key>com.apple.SystemConfiguration.SCDynamicStore-write-access</key>
+    <true/>
+    <key>com.apple.SystemConfiguration.SCPreferences-write-access</key>
+    <array>
+        <string>preferences.plist</string>
+    </array>
+    
+    <key>com.apple.private.xpc.domain-extension</key>
+            <true/>
+        <key>com.apple.private.domain-extension</key>
+            <true/>
+        <key>com.apple.private.xpc.domain-extension.proxy</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.per-user-lookup</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.per-user-create.mbsetupuser</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.event-monitor</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.app-state-manager</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.loginitem-bootstrapper</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.obliterator</key>
+            <true/>
+        <key>com.apple.private.xpc.service-attach</key>
+            <true/>
+        <key>com.apple.private.xpc.service-configure</key>
+            <true/>
+        <key>com.apple.private.xpc.persona-manager</key>
+            <true/>
+        <key>com.apple.private.xpc.persona-creator</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.loginitem-outside-bundle</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.userspace-reboot</key>
+            <true/>
+        <key>com.apple.security.app-sandbox</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.service-hold</key>
+            <true/>
+        <key>com.apple.private.xpc.launchd.enable-disable-system-services</key>
+            <true/>
+            <key>com.apple.security.network.server</key>
+                <true/>
+                <key>com.apple.security.network.client</key>
+                <true/>
+                <key>com.apple.private.memorystatus</key>
+                <true/>
+                <key>com.apple.private.cs.debugger</key>
+                <true/>
+</dict>
+</plist>
