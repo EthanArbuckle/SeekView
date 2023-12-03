@@ -19,14 +19,26 @@
 #define SEEK_MOSAIC_USB_VENDOR_ID 0x289d
 #define SEEK_MOSAIC_USB_PRODUCT_ID 0x0011
 
+#define S104SP_USB_VENDOR_ID 0x289d
+#define S104SP_USB_PRODUCT_ID 0x0010
+
 #define SEEK_MOSAIC_FRAME_HEIGHT 240
 #define SEEK_MOSAIC_FRAME_RAW_HEIGHT 260
 
 #define SEEK_MOSAIC_FRAME_WIDTH 320
 #define SEEK_MOSAIC_FRAME_RAW_WIDTH 342
 
+#define S104SP_FRAME_HEIGHT 78
+#define S104SP_FRAME_WIDTH 103
+
+//#define S104SP_FRAME_RAW_HEIGHT 78
+//#define S104SP_FRAME_RAW_WIDTH 103
+#define S104SP_FRAME_RAW_WIDTH (S104SP_FRAME_WIDTH + 2)  // Adding a margin of 1 pixel on each side
+#define S104SP_FRAME_RAW_HEIGHT (S104SP_FRAME_HEIGHT + 5)  // Adding a margin of 1 pixel on top and bottom
+
 #define SEEK_FRAME_CURRENT_FRAME_COUNT_INDEX 1
 #define SEEK_FRAME_TYPE_INDEX 2
+#define S104SP_FRAME_TYPE_INDEX 10
 
 #define SEEK_FRAME_TYPE_FSC_CALIBRATION 1
 #define SEEK_FRAME_TYPE_IMAGE 3
@@ -38,6 +50,7 @@
 #define START_GET_IMAGE_TRANSFER 0x53
 #define GET_FACTORY_SETTINGS 0x58
 #define SET_OPERATION_MODE 0x3c
+#define GET_OPERATION_MODE 61
 #define GET_FIRMWARE_INFO 0x4e
 #define SHUTTER_CONTROL 0x37
 #define READ_CHIP_ID 0x36
@@ -46,7 +59,7 @@
     do { \
         int ret = 0; \
         if ((ret = libusb_control_transfer(handle, direction, bRequest, 0, 0, data, wLength, 500)) check) { \
-            debug_log("libusb_control_transfer %s at line %d failure. err: %s\n", (direction == 0x41) ? "HOST->CAM" : "CAM->HOST", __LINE__, libusb_error_name(ret)); \
+debug_log("libusb_control_transfer %s at line %d failure. err: %s\n", (direction == 0x41) ? "HOST->CAM" : "CAM->HOST", __LINE__, libusb_error_name(ret)); exit(-1);\
             return ret; \
         } \
     } while(0)
