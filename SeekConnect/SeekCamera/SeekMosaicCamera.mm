@@ -41,6 +41,8 @@ extern "C" {
     cv::Mat intermediary_frame;
     
     cv::Mat fsc_calibration_frame;
+    cv::Mat gradient_correction_frame;
+    cv::Mat sharpness_correction_frame;
     cv::Mat dead_pixel_mask;
     std::vector<cv::Point> dead_pixels;
     
@@ -82,7 +84,7 @@ extern "C" {
         self.edgeDetectionMaxThreshold = 110;
         
         self.scaleFactor = 3.0;
-        self.blurFactor = 1.0;
+        self.blurFactor = 3.0;
         self.sharpenFactor = 0; //5
         self.opencvColormap = -1;
         
@@ -115,7 +117,7 @@ extern "C" {
         bzero(self->image_tx_out_buff, 65000);
         
         image_tx_out_mat = cv::Mat(S104SP_FRAME_RAW_HEIGHT, S104SP_FRAME_RAW_WIDTH, CV_16UC1, (void *)self->image_tx_out_buff, cv::Mat::AUTO_STEP);
-        image_tx_out_mat = image_tx_out_mat(cv::Rect(0, 0, S104SP_FRAME_WIDTH, S104SP_FRAME_HEIGHT));
+        image_tx_out_mat = image_tx_out_mat(cv::Rect(0, 1, S104SP_FRAME_WIDTH, S104SP_FRAME_HEIGHT));
         
         if (libusb_init(&libusb_ctx) < 0) {
             debug_log("libusb_init context failed\n");
@@ -264,7 +266,7 @@ extern "C" {
                 [self _handleDeviceDisconnected];
                 break;
             }
-            else if ([self _transferFrameFromCamera] != KERN_SUCCESS && self->tx_error_count >= 10) {
+            else if ([self _transferFrameFromCamera] != KERN_SUCCESS && self->tx_error_count >= 5) {
                 
                 debug_log("something seems wrong. attempting to reinitialize the session\n");
                 
@@ -306,7 +308,7 @@ extern "C" {
         int bytes_transferred;
         int transfer_status = 0;
         
-        if ((transfer_status = libusb_bulk_transfer(self->usb_camera_handle, 0x81, &buf[total_bytes_read], 8192*3, &bytes_transferred, 300)) != KERN_SUCCESS) {
+        if ((transfer_status = libusb_bulk_transfer(self->usb_camera_handle, 0x81, &buf[total_bytes_read], 8192, &bytes_transferred, 250)) != KERN_SUCCESS) {
             debug_log("libusb_bulk_transfer failed after %d bytes out of %d: %s\n", total_bytes_read, expected_transaction_len, libusb_strerror(transfer_status));
             [self->fbLock unlock];
             
@@ -337,14 +339,44 @@ extern "C" {
     
     switch (self->image_tx_buf[S104SP_FRAME_TYPE_INDEX]) {
             
+            
+        case SEEK_FRAME_TYPE_GRADIENT_CALIBRATION: {
+
+            debug_log("received gradient correction frame\n");
+            self->image_tx_mat.copyTo(self->gradient_correction_frame);
+            self->gradient_correction_frame = 0x4000 + self->gradient_correction_frame;
+
+            break;
+        }
+
+        case SEEK_FRAME_TYPE_SHARPNESS_CALIBRATION: {
+
+            debug_log("received sharpness correction frame\n");
+
+            double f_min;
+            cv::minMaxLoc(self->image_tx_mat, NULL, &f_min);
+
+            self->image_tx_mat.copyTo(self->sharpness_correction_frame);
+
+            if (f_min == 0) {
+                self->sharpness_correction_frame = 0x4000 - self->sharpness_correction_frame;
+            }
+            else {
+                cv::normalize(self->sharpness_correction_frame, self->sharpness_correction_frame, 0, 2048, cv::NORM_MINMAX);
+            }
+            
+            self->sharpness_correction_frame = 0x2000 - self->sharpness_correction_frame;
+
+            break;
+        }
+
         case SEEK_FRAME_TYPE_FSC_CALIBRATION: {
             
-            debug_log("received flat scene correction frame\n");
-            
             // Flat scene correction calibration frame
+            debug_log("received flat scene correction frame\n");
             self->image_tx_mat.copyTo(self->fsc_calibration_frame);
             self->fsc_calibration_frame = 0x4000 - self->fsc_calibration_frame;
-            
+
             break;
         }
             
@@ -364,7 +396,7 @@ extern "C" {
             
             break;
         }
-            
+    
         case SEEK_FRAME_TYPE_IMAGE: {
             // Image frame
             self.frameCount += 1;
@@ -419,13 +451,25 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     
     [self->fbLock lock];
     
-    // Apply fsc
     if (!self->fsc_calibration_frame.empty()) {
         self->image_tx_mat += self->fsc_calibration_frame;
     }
+
+    /*
+    if (!self->sharpness_correction_frame.empty()) {
+        self->image_tx_mat += self->sharpness_correction_frame;
+    }
+    */
+
+    /*
+    if (!self->gradient_correction_frame.empty()) {
+        debug_log("applying gradient correction\n");
+        self->image_tx_mat += self->gradient_correction_frame;
+    }
+    */
     
     intermediary_frame.setTo(0xffff);
-    
+
     if (self->dead_pixel_mask.empty()) {
         debug_log("processing image while without dead pixel correction\n");
         self->image_tx_mat.copyTo(intermediary_frame);
@@ -438,6 +482,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
             intermediary_frame.at<uint16_t>(pixel) = [self _getAdjacentPixelMeanAtPoint:pixel fromImage:intermediary_frame deadPixelMarker:0xffff];
         }
     }
+
     
     [self->fbLock unlock];
     
@@ -478,7 +523,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     cv::Mat frame_one_channel;
     intermediary_frame.convertTo(frame_one_channel, CV_8UC1, 1.0 / 256.0);
     
-    [self _applyTemporalSmoothingToFrame:frame_one_channel usingAccumulator:self->smoothing_accumulator alpha:0.95];
+    [self _applyTemporalSmoothingToFrame:frame_one_channel usingAccumulator:self->smoothing_accumulator alpha:0.90];
     
     cv::Mat frame_three_channel;
     
@@ -497,7 +542,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     
     // Adjust size
     cv::resize(frame_three_channel, frame_three_channel, cv::Size(), self.scaleFactor, self.scaleFactor, cv::INTER_LINEAR);
-    
+
     // Edge detection
     if (self.edgeDetection) {
         
@@ -511,7 +556,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
         cv::Mat edgeOverlay = cv::Mat::zeros(edges.size(), edges.type());
         edges.copyTo(edgeOverlay, edges);
         
-        [self _applyTemporalSmoothingToFrame:edgeOverlay usingAccumulator:self->edge_accumulator alpha:0.8];
+        [self _applyTemporalSmoothingToFrame:edgeOverlay usingAccumulator:self->edge_accumulator alpha:0.9];
         
         cv::addWeighted(frame_three_channel, 1, edgeOverlay, 1, 0, frame_three_channel);
     }
@@ -530,7 +575,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
     cv::morphologyEx(frame_three_channel, frame_three_channel, cv::MORPH_ERODE, kernel);
-    
+
     // Apply color map
     if (self.opencvColormap >= 0) {
         

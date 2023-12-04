@@ -20,7 +20,6 @@
     [super viewDidAppear];
     
     self.seekCamera = [[SeekMosaicCamera alloc] initWithDelegate:self];
-//    self.seekCamera.shutterMode = SeekCameraShutterModeManual;
     self.seekCamera.scaleFactor = 3;
     
     
