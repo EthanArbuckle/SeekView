@@ -225,7 +225,6 @@ extern "C" {
     
     // Ensure operation mode is 0
     LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_OPERATION_MODE, 2, != 2, 0x00, 0x00);
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_OPERATION_MODE, 2, != 2, 0x00, 0x00);
     LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_OPERATION_MODE, 2, < 0);
     
     // Reset image processing settings
