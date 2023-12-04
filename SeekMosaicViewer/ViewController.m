@@ -36,7 +36,7 @@
     self.fpsTextView.alignment = NSTextAlignmentRight;
     self.fpsTextView.bordered = NO;
     self.fpsTextView.enabled = NO;
-  //  [self.thermalImageView addSubview:self.fpsTextView];
+    [self.thermalImageView addSubview:self.fpsTextView];
     
     NSView *colorMapContainerView = [[NSView alloc] initWithFrame:NSMakeRect(self.thermalImageView.frame.size.width + 20, 10, 300, 220)];
     [colorMapContainerView setWantsLayer:YES];
@@ -224,7 +224,7 @@
         if (camera.frameCount == 0) {
             self->sessionStartDate = [NSDate now];
         }
-        else if ((camera.frameCount % 10) == 0) {
+        else if (camera.frameCount > 20) {
             
             NSTimeInterval streamDuration = [[NSDate now] timeIntervalSinceDate:self->sessionStartDate];
             float fps = camera.frameCount / streamDuration;

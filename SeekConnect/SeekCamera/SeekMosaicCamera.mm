@@ -45,7 +45,7 @@ extern "C" {
     std::vector<cv::Point> dead_pixels;
     
     RGB_ColorMap tyrian_color_map[256];
-    RGB_ColorMap tyrian_rendered_frame[960 * 720];
+    RGB_ColorMap tyrian_rendered_frame[(S104SP_FRAME_WIDTH * 3) * (S104SP_FRAME_HEIGHT * 3)];
     
     float exposure_multiplier;
     
@@ -73,7 +73,7 @@ extern "C" {
         self.delegate = delegate;
         self.shutterMode = SeekCameraShutterModeAuto;
         
-        self.lockExposure = 1;
+        self.lockExposure = 0;
         self.exposureMinThreshold = -1;
         self.exposureMaxThreshold = -1;
         
@@ -82,8 +82,8 @@ extern "C" {
         self.edgeDetectionMaxThreshold = 110;
         
         self.scaleFactor = 3.0;
-        self.blurFactor = 3.0;
-        self.sharpenFactor = 5.0;
+        self.blurFactor = 1.0;
+        self.sharpenFactor = 0; //5
         self.opencvColormap = -1;
         
         // Usb setup
@@ -99,23 +99,23 @@ extern "C" {
         frame_processing_queue = dispatch_queue_create("com.ea.frame.render", attrs);
         device_discovery_queue = dispatch_queue_create("com.ea.device.finder", 0);
         
-        image_tx_buf = (uint16_t *)malloc(177840);
+        image_tx_buf = (uint16_t *)malloc(65000);
         if (image_tx_buf == NULL) {
             [[NSException exceptionWithName:@"memory" reason:@"memory" userInfo:nil] raise];
         }
-        bzero(self->image_tx_buf, 177840);
+        bzero(self->image_tx_buf, 65000);
         
         image_tx_mat = cv::Mat(S104SP_FRAME_RAW_HEIGHT, S104SP_FRAME_RAW_WIDTH, CV_16UC1, (void *)self->image_tx_buf, cv::Mat::AUTO_STEP);
-        image_tx_mat = image_tx_mat(cv::Rect(1, 4, S104SP_FRAME_WIDTH, S104SP_FRAME_HEIGHT));
+        image_tx_mat = image_tx_mat(cv::Rect(0, 1, S104SP_FRAME_WIDTH, S104SP_FRAME_HEIGHT));
         
-        image_tx_out_buff = (uint16_t *)malloc(177840);
+        image_tx_out_buff = (uint16_t *)malloc(65000);
         if (image_tx_out_buff == NULL) {
             [[NSException exceptionWithName:@"memory" reason:@"memory" userInfo:nil] raise];
         }
-        bzero(self->image_tx_out_buff, 177840);
+        bzero(self->image_tx_out_buff, 65000);
         
         image_tx_out_mat = cv::Mat(S104SP_FRAME_RAW_HEIGHT, S104SP_FRAME_RAW_WIDTH, CV_16UC1, (void *)self->image_tx_out_buff, cv::Mat::AUTO_STEP);
-        image_tx_out_mat = image_tx_out_mat(cv::Rect(1, 4, S104SP_FRAME_WIDTH, S104SP_FRAME_HEIGHT));
+        image_tx_out_mat = image_tx_out_mat(cv::Rect(0, 0, S104SP_FRAME_WIDTH, S104SP_FRAME_HEIGHT));
         
         if (libusb_init(&libusb_ctx) < 0) {
             debug_log("libusb_init context failed\n");
@@ -131,21 +131,21 @@ extern "C" {
 - (void)_beginDeviceDiscovery {
     
     dispatch_async(device_discovery_queue, ^{
-
+        
         while ((self->usb_camera_handle = libusb_open_device_with_vid_pid(self->libusb_ctx, S104SP_USB_VENDOR_ID, S104SP_USB_PRODUCT_ID)) == NULL) {
             debug_log("waiting for device...\n");
             sleep(1);
         }
         
         debug_log("found a new device: %p\n", self->usb_camera_handle);
-
+        
         if (libusb_kernel_driver_active(self->usb_camera_handle, 0) && libusb_detach_kernel_driver(self->usb_camera_handle, 0) < 0) {
             debug_log("libusb_detach_kernel_driver failed\n");
             libusb_close(self->usb_camera_handle);
             libusb_exit(self->libusb_ctx);
             return;
         }
-
+        
         if (libusb_set_configuration(self->usb_camera_handle, 1) < 0) {
             debug_log("libusb_set_configuration failed\n");
             libusb_close(self->usb_camera_handle);
@@ -220,95 +220,35 @@ extern "C" {
 }
 
 - (kern_return_t)_performDeviceInitialization {
-
+    
+    // Ensure operation mode is 0
     LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_OPERATION_MODE, 2, != 2, 0x00, 0x00);
-    
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FIRMWARE_INFO, 4, < 0);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, READ_CHIP_ID, 12, < 0);
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x20, 0x00, 0x30, 0x00, 0x00, 0x00);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 64, < 0);
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x20, 0x00, 0x50, 0x00, 0x00, 0x00);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 64, < 0);
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x0c, 0x00, 0x70, 0x00, 0x00, 0x00);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 24, < 0);
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x06, 0x00, 0x08, 0x00, 0x00, 0x00);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 12, < 0);
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_IMAGE_PROCESSING_MODE, 2, != 2, 0x08, 0x00);
+    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_OPERATION_MODE, 2, != 2, 0x00, 0x00);
     LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_OPERATION_MODE, 2, < 0);
     
+    // Reset image processing settings
     LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_IMAGE_PROCESSING_MODE, 2, != 2, 0x08, 0x00);
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_OPERATION_MODE, 2, != 2, 0x01, 0x00);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_OPERATION_MODE, 2, < 0);
-
-    return KERN_SUCCESS;
     
-//    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x08, 0x00, 0x02, 0x06, 0x00, 0x00);
-//    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x08, 0x00, 0x02, 0x06, 0x00, 0x00);
+    // Init image processing
+    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x08, 0x00, 0x02, 0x06, 0x00, 0x00);
     
-//    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_OPERATION_MODE, 2, != 2, 0x00, 0x00);
-//    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_OPERATION_MODE, 2, != 2, 0x00, 0x00);
-    
-//    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FIRMWARE_INFO, 4, < 0);
-//    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, READ_CHIP_ID, 12, < 0);
-
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x20, 0x00, 0x50, 0x00, 0x00, 0x00);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 64, < 0);
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x0c, 0x00, 0x70, 0x00, 0x00, 0x00);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 24, < 0);
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x06, 0x00, 0x08, 0x00, 0x00, 0x00);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 12, < 0);
-    
+    // Get device info
     uint8_t device_info[64];
     LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FIRMWARE_INFO_FEATURES, 2, != 2, 0x17, 0x00);
     LIBUSB_TRANSFER_CAM_TO_HOST_GET_RESPONSE(usb_camera_handle, GET_FIRMWARE_INFO, 64, < 0, device_info);
     self.serialNumber = [NSString stringWithFormat:@"%s", (const char *)device_info];
+    NSLog(@"connected to %@", self.serialNumber);
     
-//    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x01, 0x00, 0x00, 0x06, 0x00, 0x00);
-//    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 2, < 0);
-//    
-//    for (uint16_t addr = 0; addr < 0xA00; addr += 32) {
-//        
-//        uint16_t addrle = OSSwapLittleToHostInt16(addr);
-//        uint8_t *addrle_p = (uint8_t *)&addrle;
-//        LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x20, 0x00, addrle_p[0], addrle_p[1], 0x00, 0x00);
-//        LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 64, < 0);
-//    }
+    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FIRMWARE_INFO_FEATURES, 2, != 2, 0x15, 0x00);
+    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00);
+    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FIRMWARE_INFO_FEATURES, 2, != 2, 0x15, 0x00);
     
-//    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FIRMWARE_INFO_FEATURES, 2, != 2, 0x17, 0x00);
-//    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FIRMWARE_INFO_FEATURES, 2, != 2, 0x15, 0x00);
-//    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00);
+    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FIRMWARE_INFO, 64, < 0);
+    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 64, < 0);
     
-//    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FIRMWARE_INFO_FEATURES, 2, != 2, 0x15, 0x00);
-//    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FIRMWARE_INFO, 64, < 0);
-    
-//    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_FACTORY_SETTINGS, 64, < 0);
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_IMAGE_PROCESSING_MODE, 2, != 2, 0x08, 0x00);
-    LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_OPERATION_MODE, 2, < 0);
-    
-    LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_IMAGE_PROCESSING_MODE, 2, != 2, 0x08, 0x00);
+    // Set operation mode to 1
     LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_OPERATION_MODE, 2, != 2, 0x01, 0x00);
     LIBUSB_TRANSFER_CAM_TO_HOST(usb_camera_handle, GET_OPERATION_MODE, 2, < 0);
-
-//    // Configure shutter mode
-//    if (self.shutterMode == SeekCameraShutterModeAuto) {
-//        // Auto shutter
-//        LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SHUTTER_CONTROL, 4, != 4, 0xff, 0x00, 0xfc, 0x00);
-//    }
-//    else {
-//        // Manual shutter
-//        LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SHUTTER_CONTROL, 4, != 4, 0xff, 0x00, 0xfd, 0x00);
-//    }
-
-//    0x0c, 0x00, 0x70, 0x00, 0x00, 0x00
     
     return KERN_SUCCESS;
 }
@@ -324,18 +264,16 @@ extern "C" {
                 [self _handleDeviceDisconnected];
                 break;
             }
-            else if ([self _transferFrameFromCamera] != KERN_SUCCESS && self->tx_error_count >= 20) {
+            else if ([self _transferFrameFromCamera] != KERN_SUCCESS && self->tx_error_count >= 10) {
                 
                 debug_log("something seems wrong. attempting to reinitialize the session\n");
                 
                 libusb_release_interface(self->usb_camera_handle, 0);
-                libusb_reset_device(self->usb_camera_handle);
-                
                 libusb_close(self->usb_camera_handle);
                 libusb_exit(self->libusb_ctx);
                 
                 self->usb_camera_handle = NULL;
-                sleep(5);
+                sleep(1);
                 
 #if !(TARGET_OS_OSX)
                 [self _killProcessesWithClaimsOnInterface];
@@ -348,8 +286,6 @@ extern "C" {
                 [self start];
                 break;
             }
-            
-            usleep((1000000.0) / 1000.0);
         }
         
         debug_log("frame_fetch_queue terminated\n");
@@ -359,17 +295,19 @@ extern "C" {
 - (kern_return_t)_transferFrameFromCamera {
     
     // Ask the device for an image, copy it into image_tx_buf
-    LIBUSB_TRANSFER_HOST_TO_CAM(self->usb_camera_handle, START_GET_IMAGE_TRANSFER, 4, != 4, 0x58, 0x5b, 0x01, 0x00);
+    LIBUSB_TRANSFER_HOST_TO_CAM(self->usb_camera_handle, START_GET_IMAGE_TRANSFER, 4, != 4, 0xc0, 0x7e, 0x00, 0x00);
     
     uint8_t *buf = (uint8_t *)self->image_tx_out_buff;
+    
     int total_bytes_read = 0;
-    while (total_bytes_read < 0x2B6B0) {
+    int expected_transaction_len = 64896;
+    while (total_bytes_read < expected_transaction_len) {
         
         int bytes_transferred;
         int transfer_status = 0;
         
-        if ((transfer_status = libusb_bulk_transfer(self->usb_camera_handle, 0x81, &buf[total_bytes_read], /*24000*/ 1024 * 1024, &bytes_transferred, 1000)) != KERN_SUCCESS) {
-            debug_log("usb bulk tx failure: failed while copying a frame: %s\n", libusb_strerror(transfer_status));
+        if ((transfer_status = libusb_bulk_transfer(self->usb_camera_handle, 0x81, &buf[total_bytes_read], 8192*3, &bytes_transferred, 300)) != KERN_SUCCESS) {
+            debug_log("libusb_bulk_transfer failed after %d bytes out of %d: %s\n", total_bytes_read, expected_transaction_len, libusb_strerror(transfer_status));
             [self->fbLock unlock];
             
             self->tx_error_count += 1;
@@ -395,19 +333,24 @@ extern "C" {
 
 - (void)_processIngestedFrameWithLength:(int)length {
     
-    self->camera_reported_frame_count = self->image_tx_buf[SEEK_FRAME_CURRENT_FRAME_COUNT_INDEX];
+    self->camera_reported_frame_count = self->image_tx_buf[S104SP_FRAME_CURRENT_FRAME_COUNT_INDEX];
     
     switch (self->image_tx_buf[S104SP_FRAME_TYPE_INDEX]) {
             
-        case SEEK_FRAME_TYPE_FSC_CALIBRATION:
+        case SEEK_FRAME_TYPE_FSC_CALIBRATION: {
+            
+            debug_log("received flat scene correction frame\n");
             
             // Flat scene correction calibration frame
             self->image_tx_mat.copyTo(self->fsc_calibration_frame);
             self->fsc_calibration_frame = 0x4000 - self->fsc_calibration_frame;
             
             break;
+        }
             
-        case SEEK_FRAME_TYPE_DP_CALIBRATION:
+        case SEEK_FRAME_TYPE_DP_CALIBRATION: {
+            
+            debug_log("received dead pixel calibration frame\n");
             
             // Dead pixel calibration frame
             [self _buildDeadPixelMask];
@@ -420,8 +363,9 @@ extern "C" {
             }
             
             break;
+        }
             
-        case SEEK_FRAME_TYPE_IMAGE:
+        case SEEK_FRAME_TYPE_IMAGE: {
             // Image frame
             self.frameCount += 1;
             
@@ -441,15 +385,16 @@ extern "C" {
             }
             
             // Process image frame
-            if (self->camera_reported_frame_count > 40) {
-                [self _processIngestedImageFrame];
-            }
+            [self _processIngestedImageFrame];
             
             break;
+        }
             
-        default:
+        default: {
             // Unhandled frame type
+            debug_log("received unknown frame type: %d\n", self->image_tx_buf[S104SP_FRAME_TYPE_INDEX]);
             break;
+        }
     }
 }
 
@@ -482,6 +427,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     intermediary_frame.setTo(0xffff);
     
     if (self->dead_pixel_mask.empty()) {
+        debug_log("processing image while without dead pixel correction\n");
         self->image_tx_mat.copyTo(intermediary_frame);
     }
     else {
@@ -531,9 +477,9 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     // Convert to 1 channel grayscale
     cv::Mat frame_one_channel;
     intermediary_frame.convertTo(frame_one_channel, CV_8UC1, 1.0 / 256.0);
-
-    [self _applyTemporalSmoothingToFrame:frame_one_channel usingAccumulator:self->smoothing_accumulator alpha:0.7];
-        
+    
+    [self _applyTemporalSmoothingToFrame:frame_one_channel usingAccumulator:self->smoothing_accumulator alpha:0.95];
+    
     cv::Mat frame_three_channel;
     
     // Blur
@@ -557,17 +503,23 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
         
         cv::Mat edge_detect_blur_one_channel;
         intermediary_frame.convertTo(edge_detect_blur_one_channel, CV_8UC1, 1.0 / 256.0);
-
+        
         cv::resize(edge_detect_blur_one_channel, edge_detect_blur_one_channel, cv::Size(), self.scaleFactor, self.scaleFactor, cv::INTER_LINEAR);
         cv::GaussianBlur(edge_detect_blur_one_channel, edge_detect_blur_one_channel, cv::Size(1, 1), 0);
         
         cv::Mat edges = findPerimeter(edge_detect_blur_one_channel);
         cv::Mat edgeOverlay = cv::Mat::zeros(edges.size(), edges.type());
         edges.copyTo(edgeOverlay, edges);
-   
-        [self _applyTemporalSmoothingToFrame:edgeOverlay usingAccumulator:self->edge_accumulator alpha:0.7];
+        
+        [self _applyTemporalSmoothingToFrame:edgeOverlay usingAccumulator:self->edge_accumulator alpha:0.8];
         
         cv::addWeighted(frame_three_channel, 1, edgeOverlay, 1, 0, frame_three_channel);
+    }
+    
+    // Accumulate some processed frames before handing a final rendered image to the delegate
+    if (self.frameCount < 5) {
+        debug_log("still accumulating frames... frame count: %d\n", self.frameCount);
+        return;
     }
     
     // Sharpen
@@ -578,14 +530,13 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
     cv::morphologyEx(frame_three_channel, frame_three_channel, cv::MORPH_ERODE, kernel);
-
+    
     // Apply color map
     if (self.opencvColormap >= 0) {
         
         // User specified an opencv colormap
         cv::applyColorMap(frame_three_channel, frame_three_channel, self.opencvColormap);
-//        cv::cvtColor(frame_three_channel, frame_three_channel, cv::COLOR_GRAY2RGB);
-
+        
         [self.delegate seekCamera:self sentFrame:[self _imageFromPixelData:frame_three_channel.data width:frame_three_channel.cols height:frame_three_channel.rows]];
     }
     else {
@@ -725,12 +676,12 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
 }
 
 - (void)_applyTemporalSmoothingToFrame:(const cv::Mat&)frame usingAccumulator:(cv::Mat&)accumulator alpha:(double)alpha {
-
+    
     if (accumulator.empty()) {
         frame.convertTo(accumulator, CV_32F);
     }
     
-    cv::accumulateWeighted(frame,accumulator, alpha);
+    cv::accumulateWeighted(frame, accumulator, alpha);
     accumulator.convertTo(frame, frame.type());
 }
 
