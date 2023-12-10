@@ -5,6 +5,7 @@
 //  Created by Ethan Arbuckle
 //
 
+#import <opencv2/opencv.hpp>
 #import <Foundation/Foundation.h>
 
 typedef NS_ENUM(NSUInteger, SeekCameraShutterMode) {
@@ -41,12 +42,11 @@ typedef NS_ENUM(NSUInteger, SeekCameraShutterMode) {
 @property (nonatomic) double edgeDetectioneMinThreshold;
 @property (nonatomic) double edgeDetectionMaxThreshold;
 
-
-
-- (id)initWithDelegate:(id<SeekCameraDelegate>)delegate;
+- (id)initWithHandle:(void *)dev delegate:(id<SeekCameraDelegate>)delegate;
 - (void)start;
 - (void)toggleShutter;
 - (void)resetExposureThresholds;
+- (void)setAccum:(cv::Mat)mat;
 
 @end
 

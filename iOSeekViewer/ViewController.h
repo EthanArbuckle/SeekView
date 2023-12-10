@@ -11,6 +11,7 @@
 @interface ViewController : UIViewController <SeekCameraDelegate>
 
 @property (nonatomic, retain) UIImageView *thermalImageView;
+@property (nonatomic, retain) UIImageView *thermalImageView2;
 @property (nonatomic, retain) SeekMosaicCamera *seekCamera;
 
 @property (nonatomic, retain) UILabel *fpsTextView;

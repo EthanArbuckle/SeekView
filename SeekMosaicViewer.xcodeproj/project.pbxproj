@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5F2502ED2AE5153F0089CC50 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 5F2502EC2AE5153F0089CC50 /* AppDelegate.m */; };
-		5F2502F02AE5153F0089CC50 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 5F2502EF2AE5153F0089CC50 /* ViewController.m */; };
+		5F2502F02AE5153F0089CC50 /* ViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5F2502EF2AE5153F0089CC50 /* ViewController.mm */; };
 		5F2502F22AE515400089CC50 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5F2502F12AE515400089CC50 /* Assets.xcassets */; };
 		5F2502F52AE515400089CC50 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 5F2502F32AE515400089CC50 /* Main.storyboard */; };
 		5F2505A92AE51AEC0089CC50 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 5F2505A82AE51AEC0089CC50 /* main.m */; };
@@ -39,6 +39,8 @@
 		5F4AEF262AF7BF8700EE7793 /* opencv2_ios.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F4AEF252AF7BF8300EE7793 /* opencv2_ios.a */; platformFilter = ios; };
 		5F4AEF282AF7C03800EE7793 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F4AEF272AF7C03700EE7793 /* UIKit.framework */; platformFilter = ios; };
 		5F4AEF2A2AF7C10D00EE7793 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F4AEF292AF7C10D00EE7793 /* CoreGraphics.framework */; };
+		5F8C88A32B233CB7002845FC /* SeekDeviceDiscovery.h in Headers */ = {isa = PBXBuildFile; fileRef = 5F8C88A12B233CB7002845FC /* SeekDeviceDiscovery.h */; };
+		5F8C88A42B233CB7002845FC /* SeekDeviceDiscovery.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5F8C88A22B233CB7002845FC /* SeekDeviceDiscovery.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,7 +90,7 @@
 		5F2502EB2AE5153F0089CC50 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		5F2502EC2AE5153F0089CC50 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
 		5F2502EE2AE5153F0089CC50 /* ViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ViewController.h; sourceTree = "<group>"; };
-		5F2502EF2AE5153F0089CC50 /* ViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewController.m; sourceTree = "<group>"; };
+		5F2502EF2AE5153F0089CC50 /* ViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ViewController.mm; sourceTree = "<group>"; };
 		5F2502F12AE515400089CC50 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5F2502F42AE515400089CC50 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		5F2502F82AE515400089CC50 /* SeekMosaicViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SeekMosaicViewer.entitlements; sourceTree = "<group>"; };
@@ -705,6 +707,8 @@
 		5F4AEF252AF7BF8300EE7793 /* opencv2_ios.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = opencv2_ios.a; path = libs/opencv2_ios.a; sourceTree = "<group>"; };
 		5F4AEF272AF7C03700EE7793 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk/System/Library/Frameworks/UIKit.framework; sourceTree = DEVELOPER_DIR; };
 		5F4AEF292AF7C10D00EE7793 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk/System/Library/Frameworks/CoreGraphics.framework; sourceTree = DEVELOPER_DIR; };
+		5F8C88A12B233CB7002845FC /* SeekDeviceDiscovery.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SeekDeviceDiscovery.h; sourceTree = "<group>"; };
+		5F8C88A22B233CB7002845FC /* SeekDeviceDiscovery.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SeekDeviceDiscovery.mm; sourceTree = "<group>"; };
 		5FAFF3552AF91F0D0029E4E2 /* libxpc.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libxpc.tbd; path = usr/lib/system/libxpc.tbd; sourceTree = SDKROOT; };
 		5FC09C492AF3AB2300E3F6D6 /* SeekMosaicCamera.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SeekMosaicCamera.mm; sourceTree = "<group>"; };
 		5FC09C4A2AF3AB2300E3F6D6 /* SeekMosaicCamera.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SeekMosaicCamera.h; sourceTree = "<group>"; };
@@ -782,7 +786,7 @@
 				5F2502EB2AE5153F0089CC50 /* AppDelegate.h */,
 				5F2502EC2AE5153F0089CC50 /* AppDelegate.m */,
 				5F2502EE2AE5153F0089CC50 /* ViewController.h */,
-				5F2502EF2AE5153F0089CC50 /* ViewController.m */,
+				5F2502EF2AE5153F0089CC50 /* ViewController.mm */,
 				5F2505A82AE51AEC0089CC50 /* main.m */,
 				5F2502F12AE515400089CC50 /* Assets.xcassets */,
 				5F2502F32AE515400089CC50 /* Main.storyboard */,
@@ -2086,6 +2090,8 @@
 				5FC09C4D2AF3B08500E3F6D6 /* seek.h */,
 				5FC09C4A2AF3AB2300E3F6D6 /* SeekMosaicCamera.h */,
 				5FC09C492AF3AB2300E3F6D6 /* SeekMosaicCamera.mm */,
+				5F8C88A12B233CB7002845FC /* SeekDeviceDiscovery.h */,
+				5F8C88A22B233CB7002845FC /* SeekDeviceDiscovery.mm */,
 			);
 			path = SeekCamera;
 			sourceTree = "<group>";
@@ -2099,6 +2105,7 @@
 			files = (
 				5F4AEF082AF7BA2E00EE7793 /* SeekMosaicCamera.h in Headers */,
 				5F4AEF092AF7BA3700EE7793 /* seek.h in Headers */,
+				5F8C88A32B233CB7002845FC /* SeekDeviceDiscovery.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2236,7 +2243,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5F2505A92AE51AEC0089CC50 /* main.m in Sources */,
-				5F2502F02AE5153F0089CC50 /* ViewController.m in Sources */,
+				5F2502F02AE5153F0089CC50 /* ViewController.mm in Sources */,
 				5F2502ED2AE5153F0089CC50 /* AppDelegate.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2256,6 +2263,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5F8C88A42B233CB7002845FC /* SeekDeviceDiscovery.mm in Sources */,
 				5F4AEF012AF7B97000EE7793 /* SeekMosaicCamera.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

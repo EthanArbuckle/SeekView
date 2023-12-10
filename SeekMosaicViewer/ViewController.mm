@@ -5,30 +5,59 @@
 //  Created by Ethan Arbuckle
 //
 
+#import <opencv2/opencv.hpp>
 #import "ViewController.h"
+#import "SeekDeviceDiscovery.h"
 
 @interface ViewController () {
     NSDate *sessionStartDate;
+    SeekDeviceDiscovery *deviceDiscoverer;
+    NSMutableArray *activeDevices;
+    cv::Mat root_accumulator;
+    int combined_frame_count;
 }
 
 @end
 
+int x_offset = 0;
+int y_offset = 0;
+int edge = 0;
 
 @implementation ViewController
 
 - (void)viewDidAppear {
     [super viewDidAppear];
     
-    self.seekCamera = [[SeekMosaicCamera alloc] initWithDelegate:self];
-    self.seekCamera.scaleFactor = 3;
-    
+    self->activeDevices = [[NSMutableArray alloc] init];
+//    self.seekCamera = [[SeekMosaicCamera alloc] initWithDelegate:self];
+//    self.seekCamera.scaleFactor = 3;
+    self->deviceDiscoverer = [[SeekDeviceDiscovery alloc] init];
+    __block typeof(self) weakSelf = self;
+    [self->deviceDiscoverer addDiscoveryHandler:^(SeekMosaicCamera * _Nonnull device) {
+        
+        [device setDelegate:self];
+        [device setAccum:self->root_accumulator];
+        [device start];
+        
+        [weakSelf->activeDevices addObject:device];
+    }];
     
     // Setup window and image view to contain the thermal images
     self.view.window.minSize = NSMakeSize(970, 730);
     self.thermalImageView = [[NSImageView alloc] initWithFrame:NSMakeRect(10, 10, 960, 720)];
     [self.thermalImageView setWantsLayer:YES];
-    [[self.thermalImageView layer] setBackgroundColor:[NSColor darkGrayColor].CGColor];
+    [[self.thermalImageView layer] setBackgroundColor:[NSColor clearColor].CGColor];
+    self.thermalImageView.alphaValue = 1;//0.50;
+    self.thermalImageView.imageScaling = NSImageScaleNone;
     [self.view addSubview:self.thermalImageView];
+    
+//    self.view.window.minSize = NSMakeSize(970, 730);
+    self.thermalImageView2 = [[NSImageView alloc] initWithFrame:NSMakeRect(10, 10, 960, 720)];
+    [self.thermalImageView2 setWantsLayer:YES];
+    [[self.thermalImageView2 layer] setBackgroundColor:[NSColor clearColor].CGColor];
+    self.thermalImageView2.alphaValue = 0.50;
+    self.thermalImageView2.imageScaling = NSImageScaleNone;
+    [self.view addSubview:self.thermalImageView2];
     
     self.fpsTextView = [[NSTextField alloc] initWithFrame:NSMakeRect(self.thermalImageView.frame.size.width - 180, 5, 170, 50)];
     self.fpsTextView.backgroundColor = [NSColor clearColor];
@@ -49,7 +78,11 @@
     [self addControlsToView:edgeDetectionContainerView];
     [self.view addSubview:edgeDetectionContainerView];
     
-    [self.seekCamera start];
+    self->combined_frame_count = 0;
+    edge = 1;
+    
+//    [self.seekCamera start];
+    [self->deviceDiscoverer startDiscovery];
 }
 
 - (void)addColormapButtonsToView:(NSView *)parentView {
@@ -104,7 +137,7 @@
     minLabel.backgroundColor = [NSColor clearColor];
     [parentView addSubview:minLabel];
 
-    NSSlider *minSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, minLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:1 maxValue:250 action:@selector(minSliderChanged:)];
+    NSSlider *minSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, minLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:-100 maxValue:100 action:@selector(minSliderChanged:)];
     minSlider.floatValue = self.seekCamera.edgeDetectioneMinThreshold;
     [parentView addSubview:minSlider];
 
@@ -112,7 +145,7 @@
     maxLabel.backgroundColor = [NSColor clearColor];
     [parentView addSubview:maxLabel];
 
-    NSSlider *maxSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, maxLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:1 maxValue:250 action:@selector(maxSliderChanged:)];
+    NSSlider *maxSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, maxLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:-100 maxValue:100 action:@selector(maxSliderChanged:)];
     maxSlider.floatValue = self.seekCamera.edgeDetectionMaxThreshold;
     [parentView addSubview:maxSlider];
 
@@ -163,15 +196,19 @@
 }
 
 - (void)minSliderChanged:(NSSlider *)sender {
-    [self.seekCamera setExposureMinThreshold:[sender doubleValue]];
+    x_offset = [sender doubleValue];
+//    [self.seekCamera setExposureMinThreshold:[sender doubleValue]];
 }
 
 - (void)maxSliderChanged:(NSSlider *)sender {
-    [self.seekCamera setExposureMaxThreshold:[sender doubleValue]];
+//    offset = [sender doubleValue];
+    y_offset = [sender doubleValue];
+//    [self.seekCamera setExposureMaxThreshold:[sender doubleValue]];
 }
 
 - (void)edgeDetectionSwitchToggled:(NSSwitch *)sender {
     self.seekCamera.edgeDetection = sender.state == NSControlStateValueOn;
+    edge = sender.state == NSControlStateValueOn;
 }
 
 - (void)autoShutterSwitchToggled:(NSSwitch *)sender {
@@ -193,6 +230,9 @@
     CGRect thermalImageViewFrame = self.thermalImageView.frame;
     thermalImageViewFrame.origin.y = (windowHeight / 2) - (imageViewHeight / 2);
     self.thermalImageView.frame = thermalImageViewFrame;
+    
+    thermalImageViewFrame.origin.y = 20;
+    self.thermalImageView2.frame = thermalImageViewFrame;
 }
 
 - (void)handleColormapButton:(NSButton *)sender {
@@ -214,19 +254,55 @@
     NSLog(@"Disconnected from device: %@", camera.serialNumber);
 }
 
+- (NSImage *)offsetImage:(NSImage *)image xOffset:(CGFloat)xOffset yOffset:(CGFloat)yOffset {
+    // Create a new NSImage with the same size as the original
+    NSImage *offsetImage = [[NSImage alloc] initWithSize:[image size]];
+
+    [offsetImage lockFocus];
+    
+    // Calculate the new origin point
+    NSRect newRect = NSMakeRect(xOffset, yOffset, [image size].width, [image size].height);
+    
+    // Draw the original image in the new position
+    [image drawInRect:newRect fromRect:NSZeroRect operation:NSCompositingOperationCopy fraction:1.0];
+
+    [offsetImage unlockFocus];
+
+    return offsetImage;
+}
+
 - (void)seekCamera:(SeekMosaicCamera *)camera sentFrame:(NSImage *)frame {
     
     dispatch_sync(dispatch_get_main_queue(), ^{
         
-        self.thermalImageView.image = frame;
+        camera.edgeDetection = edge;
+        
+        if ([camera.serialNumber containsString:@"21D"]) {
+            
+            CGFloat xOffset = x_offset;//camera.edgeDetectioneMinThreshold; // Adjust as necessary
+            CGFloat yOffset = y_offset;  // Adjust if vertical offset is also needed
+//            NSImage *adjustedImage = [self offsetImage:frame xOffset:xOffset yOffset:yOffset];
+//            NSLog(@"2 %@", self.thermalImageView2);
+            NSRect baseFrameRect = self.thermalImageView.frame;
+            NSRect overlayedFrameRect = self.thermalImageView2.frame;
+            overlayedFrameRect.origin.x = baseFrameRect.origin.x + x_offset;
+            overlayedFrameRect.origin.y = baseFrameRect.origin.y + y_offset;
+            self.thermalImageView2.frame = overlayedFrameRect;
+            self.thermalImageView2.image = frame;
+        }
+        else {
+//            NSLog(@"1 %@", self.thermalImageView);
+            self.thermalImageView.image = frame;
+        }
         
         if (camera.frameCount == 0) {
             self->sessionStartDate = [NSDate now];
         }
         else if (camera.frameCount > 20) {
             
+            self->combined_frame_count += 1;
             NSTimeInterval streamDuration = [[NSDate now] timeIntervalSinceDate:self->sessionStartDate];
-            float fps = camera.frameCount / streamDuration;
+            float fps = self->combined_frame_count / streamDuration;
             NSAttributedString *attr = [[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%.2f fps", fps] attributes:@{
                 NSStrokeWidthAttributeName: @-3.0,
                 NSStrokeColorAttributeName:[NSColor blackColor],
@@ -236,10 +312,10 @@
             
             self.fpsTextView.placeholderAttributedString = attr;
         }
-        
-        if ((camera.frameCount % 1000) == 0) {
-            [camera toggleShutter];
-        }
+//
+//        if ((camera.frameCount % 1000) == 0) {
+//            [camera toggleShutter];
+//        }
     });
 }
 

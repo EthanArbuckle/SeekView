@@ -25,10 +25,8 @@ extern "C" {
     dispatch_queue_t frame_fetch_queue;
     dispatch_queue_t frame_render_queue;
     dispatch_queue_t frame_processing_queue;
-    dispatch_queue_t device_discovery_queue;
-    
+
     libusb_device_handle *usb_camera_handle;
-    libusb_context *libusb_ctx;
     
     uint16_t *image_tx_buf;
     cv::Mat image_tx_mat;
@@ -37,6 +35,7 @@ extern "C" {
     
     cv::Mat smoothing_accumulator;
     cv::Mat edge_accumulator;
+    cv::Mat root_accumulator;
     
     cv::Mat intermediary_frame;
     
@@ -68,10 +67,11 @@ extern "C" {
 
 @implementation SeekMosaicCamera
 
-- (id)initWithDelegate:(id<SeekCameraDelegate>)delegate {
+- (id)initWithHandle:(libusb_device_handle *)dev delegate:(id<SeekCameraDelegate>)delegate {
     
     if ((self = [super init])) {
         
+        self->usb_camera_handle = dev;
         self.delegate = delegate;
         self.shutterMode = SeekCameraShutterModeAuto;
         
@@ -80,18 +80,14 @@ extern "C" {
         self.exposureMaxThreshold = -1;
         
         self.edgeDetection = YES;
-        self.edgeDetectioneMinThreshold = 90;
-        self.edgeDetectionMaxThreshold = 110;
+        self.edgeDetectioneMinThreshold = 0;//90;
+        self.edgeDetectionMaxThreshold = 0;//110;
         
         self.scaleFactor = 3.0;
         self.blurFactor = 3.0;
         self.sharpenFactor = 0; //5
-        self.opencvColormap = -1;
-        
-        // Usb setup
-        usb_camera_handle = NULL;
-        libusb_ctx = NULL;
-        
+        self.opencvColormap = 21;//-1;
+
         fbLock = [[NSLock alloc] init];
         
         // Queues for fetching frames, processing them, and drawing them
@@ -99,7 +95,6 @@ extern "C" {
         frame_fetch_queue = dispatch_queue_create("com.ea.frame.fetcher", attrs);
         frame_render_queue = dispatch_queue_create("com.ea.frame.render", attrs);
         frame_processing_queue = dispatch_queue_create("com.ea.frame.render", attrs);
-        device_discovery_queue = dispatch_queue_create("com.ea.device.finder", 0);
         
         image_tx_buf = (uint16_t *)malloc(65000);
         if (image_tx_buf == NULL) {
@@ -119,75 +114,10 @@ extern "C" {
         image_tx_out_mat = cv::Mat(S104SP_FRAME_RAW_HEIGHT, S104SP_FRAME_RAW_WIDTH, CV_16UC1, (void *)self->image_tx_out_buff, cv::Mat::AUTO_STEP);
         image_tx_out_mat = image_tx_out_mat(cv::Rect(0, 1, S104SP_FRAME_WIDTH, S104SP_FRAME_HEIGHT));
         
-        if (libusb_init(&libusb_ctx) < 0) {
-            debug_log("libusb_init context failed\n");
-            return nil;
-        }
-        
         build_tyrian_like_color_map(tyrian_color_map);
     }
     
     return self;
-}
-
-- (void)_beginDeviceDiscovery {
-    
-    dispatch_async(device_discovery_queue, ^{
-        
-        while ((self->usb_camera_handle = libusb_open_device_with_vid_pid(self->libusb_ctx, S104SP_USB_VENDOR_ID, S104SP_USB_PRODUCT_ID)) == NULL) {
-            debug_log("waiting for device...\n");
-            sleep(1);
-        }
-        
-        debug_log("found a new device: %p\n", self->usb_camera_handle);
-        
-        if (libusb_kernel_driver_active(self->usb_camera_handle, 0) && libusb_detach_kernel_driver(self->usb_camera_handle, 0) < 0) {
-            debug_log("libusb_detach_kernel_driver failed\n");
-            libusb_close(self->usb_camera_handle);
-            libusb_exit(self->libusb_ctx);
-            return;
-        }
-        
-        if (libusb_set_configuration(self->usb_camera_handle, 1) < 0) {
-            debug_log("libusb_set_configuration failed\n");
-            libusb_close(self->usb_camera_handle);
-            libusb_exit(self->libusb_ctx);
-            return;
-        }
-        
-        debug_log("attempting to connect to the device\n");
-        for (int i = 0; i < 5; i++) {
-            
-            if (libusb_claim_interface(self->usb_camera_handle, 0) == LIBUSB_SUCCESS) {
-                
-                debug_log("succesfully claimed usb interface\n");
-                [self _handleDeviceConnected];
-                return;
-            }
-            
-            debug_log("libusb_claim_interface failed\n");
-            
-            
-#if !(TARGET_OS_OSX)
-            [self _killProcessesWithClaimsOnInterface];
-#endif
-            sleep(1);
-        }
-        
-        // Failed to connect
-        printf("Failed to connect to device. Restarting libusb and discovery queue\n");
-        libusb_close(self->usb_camera_handle);
-        libusb_exit(self->libusb_ctx);
-        
-        if (libusb_init(&self->libusb_ctx) < 0) {
-            debug_log("libusb_init context failed\n");
-            return;
-        }
-        
-        [self start];
-        
-        debug_log("device_discovery_queue terminated\n");
-    });
 }
 
 - (void)_handleDeviceDisconnected {
@@ -200,14 +130,20 @@ extern "C" {
     
     // Startup the device discovery queue. For some reason there needs to be a delay, otherwise
     // libusb "succeeds" in reconnecting but then fails when taking ownership
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self _beginDeviceDiscovery];
-    });
+//    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+     //   [self _beginDeviceDiscovery];
+//    });
     
 }
 
-- (kern_return_t)_handleDeviceConnected {
+- (kern_return_t)start {//_handleDeviceConnected {
     
+    if (self->usb_camera_handle == NULL) {
+        printf("Attepmting to start capturing but device handle is null\n");
+        return;
+    }
+
+    [self _start];
     [self _performDeviceInitialization];
     
     // Notify delegate of connection event
@@ -265,27 +201,28 @@ extern "C" {
                 [self _handleDeviceDisconnected];
                 break;
             }
-            else if ([self _transferFrameFromCamera] != KERN_SUCCESS && self->tx_error_count >= 5) {
+            else if (1 && [self _transferFrameFromCamera] != KERN_SUCCESS && self->tx_error_count >= 20) {
                 
                 debug_log("something seems wrong. attempting to reinitialize the session\n");
                 
-                libusb_release_interface(self->usb_camera_handle, 0);
-                libusb_close(self->usb_camera_handle);
-                libusb_exit(self->libusb_ctx);
+//                libusb_release_interface(self->usb_camera_handle, 0);
+//                libusb_close(self->usb_camera_handle);
+//                libusb_exit(self->libusb_ctx);
                 
-                self->usb_camera_handle = NULL;
+//                self->usb_camera_handle = NULL;
                 sleep(1);
                 
 #if !(TARGET_OS_OSX)
                 [self _killProcessesWithClaimsOnInterface];
 #endif
-                if (libusb_init(&self->libusb_ctx) < 0) {
-                    debug_log("libusb_init context failed\n");
-                    return;
-                }
+//                if (libusb_init(&self->libusb_ctx) < 0) {
+//                    debug_log("libusb_init context failed\n");
+//                    return;
+//                }
                 
-                [self start];
-                break;
+                [self _start];
+                [self _performDeviceInitialization];
+//                break;
             }
         }
         
@@ -341,7 +278,7 @@ extern "C" {
             
         case SEEK_FRAME_TYPE_GRADIENT_CALIBRATION: {
 
-            debug_log("received gradient correction frame\n");
+//            debug_log("received gradient correction frame\n");
             self->image_tx_mat.copyTo(self->gradient_correction_frame);
             self->gradient_correction_frame = 0x4000 + self->gradient_correction_frame;
 
@@ -350,7 +287,7 @@ extern "C" {
 
         case SEEK_FRAME_TYPE_SHARPNESS_CALIBRATION: {
 
-            debug_log("received sharpness correction frame\n");
+//            debug_log("received sharpness correction frame\n");
 
             double f_min;
             cv::minMaxLoc(self->image_tx_mat, NULL, &f_min);
@@ -372,7 +309,7 @@ extern "C" {
         case SEEK_FRAME_TYPE_FSC_CALIBRATION: {
             
             // Flat scene correction calibration frame
-            debug_log("received flat scene correction frame\n");
+//            debug_log("received flat scene correction frame\n");
             self->image_tx_mat.copyTo(self->fsc_calibration_frame);
             self->fsc_calibration_frame = 0x4000 - self->fsc_calibration_frame;
 
@@ -381,7 +318,7 @@ extern "C" {
             
         case SEEK_FRAME_TYPE_DP_CALIBRATION: {
             
-            debug_log("received dead pixel calibration frame\n");
+//            debug_log("received dead pixel calibration frame\n");
             
             // Dead pixel calibration frame
             [self _buildDeadPixelMask];
@@ -444,6 +381,10 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     
     cv::subtract(dilated, eroded, perimeter);
     return perimeter;
+}
+
+- (void)setAccum:(cv::Mat)mat {
+    self->root_accumulator = mat;
 }
 
 - (void)_processIngestedImageFrame {
@@ -523,6 +464,8 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     intermediary_frame.convertTo(frame_one_channel, CV_8UC1, 1.0 / 256.0);
     
     [self _applyTemporalSmoothingToFrame:frame_one_channel usingAccumulator:self->smoothing_accumulator alpha:0.90];
+    
+//    [self _applyTemporalSmoothingToFrame:frame_one_channel usingAccumulator:self->root_accumulator alpha:0.50];
     
     cv::Mat frame_three_channel;
     
@@ -729,7 +672,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     accumulator.convertTo(frame, frame.type());
 }
 
-- (void)start {
+- (void)_start {
     
     if (!self.delegate) {
         return;
@@ -737,7 +680,6 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     
     self.frameCount = 0;
     self->tx_error_count = 0;
-    [self _beginDeviceDiscovery];
 }
 
 - (void)toggleShutter {
