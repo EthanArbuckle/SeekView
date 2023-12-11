@@ -31,12 +31,6 @@
 #define S104SP_FRAME_WIDTH 207
 #define S104SP_FRAME_HEIGHT 154
 
-#define S104SP_FRAME_RAW_WIDTH 208
-#define S104SP_FRAME_RAW_HEIGHT 156
-//#define S104SP_FRAME_RAW_WIDTH 208  // Adding a margin of 1 pixel on each side
-//#define S104SP_FRAME_RAW_HEIGHT 156 // Adding a margin of 1 pixel on top and bottom
-
-
 #define SEEK_FRAME_CURRENT_FRAME_COUNT_INDEX 1
 #define S104SP_FRAME_CURRENT_FRAME_COUNT_INDEX 40
 

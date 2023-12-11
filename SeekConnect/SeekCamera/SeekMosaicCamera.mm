@@ -73,9 +73,9 @@ extern "C" {
     if ((self = [super init])) {
         
         self.delegate = delegate;
-        self.shutterMode = SeekCameraShutterModeAuto;
+        self.shutterMode = SeekCameraShutterModeManual;//SeekCameraShutterModeAuto;
         
-        self.lockExposure = 0;
+        self.lockExposure = 1;
         self.exposureMinThreshold = -1;
         self.exposureMaxThreshold = -1;
         
@@ -83,8 +83,8 @@ extern "C" {
         self.edgeDetectioneMinThreshold = 90;
         self.edgeDetectionMaxThreshold = 110;
         
-        self.scaleFactor = 3.0;
-        self.blurFactor = 3.0;
+        self.scaleFactor = 3;
+        self.blurFactor = 1.0;
         self.sharpenFactor = 0; //5
         self.opencvColormap = -1;
         
@@ -101,23 +101,20 @@ extern "C" {
         frame_processing_queue = dispatch_queue_create("com.ea.frame.render", attrs);
         device_discovery_queue = dispatch_queue_create("com.ea.device.finder", 0);
         
-        image_tx_buf = (uint16_t *)malloc(65000);
+        image_tx_buf = (uint16_t *)malloc(65535);
         if (image_tx_buf == NULL) {
             [[NSException exceptionWithName:@"memory" reason:@"memory" userInfo:nil] raise];
         }
-        bzero(self->image_tx_buf, 65000);
+        bzero(self->image_tx_buf, 65535);
         
-        image_tx_mat = cv::Mat(S104SP_FRAME_RAW_HEIGHT, S104SP_FRAME_RAW_WIDTH, CV_16UC1, (void *)self->image_tx_buf, cv::Mat::AUTO_STEP);
+        image_tx_mat = cv::Mat(S104SP_FRAME_HEIGHT + 2, S104SP_FRAME_WIDTH + 1,  CV_16UC1, (void *)self->image_tx_buf, cv::Mat::AUTO_STEP);
         image_tx_mat = image_tx_mat(cv::Rect(0, 1, S104SP_FRAME_WIDTH, S104SP_FRAME_HEIGHT));
         
-        image_tx_out_buff = (uint16_t *)malloc(65000);
+        image_tx_out_buff = (uint16_t *)malloc(65535);
         if (image_tx_out_buff == NULL) {
             [[NSException exceptionWithName:@"memory" reason:@"memory" userInfo:nil] raise];
         }
-        bzero(self->image_tx_out_buff, 65000);
-        
-        image_tx_out_mat = cv::Mat(S104SP_FRAME_RAW_HEIGHT, S104SP_FRAME_RAW_WIDTH, CV_16UC1, (void *)self->image_tx_out_buff, cv::Mat::AUTO_STEP);
-        image_tx_out_mat = image_tx_out_mat(cv::Rect(0, 1, S104SP_FRAME_WIDTH, S104SP_FRAME_HEIGHT));
+        bzero(self->image_tx_out_buff, 65535);
         
         if (libusb_init(&libusb_ctx) < 0) {
             debug_log("libusb_init context failed\n");
@@ -230,6 +227,13 @@ extern "C" {
     // Reset image processing settings
     LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_IMAGE_PROCESSING_MODE, 2, != 2, 0x08, 0x00);
     
+    if (self.shutterMode == SeekCameraShutterModeManual) {
+        LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SHUTTER_CONTROL, 4, != 4, 0xff, 0x00, 0xfd, 0x00);
+    }
+    else {
+        LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SHUTTER_CONTROL, 4, != 4, 0xff, 0x00, 0xfc, 0x00);
+    }
+    
     // Init image processing
     LIBUSB_TRANSFER_HOST_TO_CAM(usb_camera_handle, SET_FACTORY_SETTINGS_FEATURES, 6, != 6, 0x08, 0x00, 0x02, 0x06, 0x00, 0x00);
     
@@ -268,6 +272,8 @@ extern "C" {
             else if ([self _transferFrameFromCamera] != KERN_SUCCESS && self->tx_error_count >= 5) {
                 
                 debug_log("something seems wrong. attempting to reinitialize the session\n");
+                [self _performDeviceInitialization];
+                continue;
                 
                 libusb_release_interface(self->usb_camera_handle, 0);
                 libusb_close(self->usb_camera_handle);
@@ -307,7 +313,7 @@ extern "C" {
         int bytes_transferred;
         int transfer_status = 0;
         
-        if ((transfer_status = libusb_bulk_transfer(self->usb_camera_handle, 0x81, &buf[total_bytes_read], 8192, &bytes_transferred, 250)) != KERN_SUCCESS) {
+        if ((transfer_status = libusb_bulk_transfer(self->usb_camera_handle, 0x81, &buf[total_bytes_read], 4096, &bytes_transferred, 250)) != KERN_SUCCESS) {
             debug_log("libusb_bulk_transfer failed after %d bytes out of %d: %s\n", total_bytes_read, expected_transaction_len, libusb_strerror(transfer_status));
             [self->fbLock unlock];
             
@@ -411,7 +417,7 @@ extern "C" {
             
             if (self.shutterMode == SeekCameraShutterModeManual) {
                 if (self->camera_reported_frame_count <= 60 && (self->camera_reported_frame_count % 20) == 0) {
-                    [self toggleShutter];
+                 //   [self toggleShutter];
                 }
             }
             
@@ -448,7 +454,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
 
 - (void)_processIngestedImageFrame {
     
-    [self->fbLock lock];
+//    [self->fbLock lock];
     
     if (!self->fsc_calibration_frame.empty()) {
         self->image_tx_mat += self->fsc_calibration_frame;
@@ -467,7 +473,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     }
     */
     
-    intermediary_frame.setTo(0xffff);
+    intermediary_frame.setTo(65535);
 
     if (self->dead_pixel_mask.empty()) {
         debug_log("processing image while without dead pixel correction\n");
@@ -482,8 +488,9 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
         }
     }
 
+
     
-    [self->fbLock unlock];
+//    [self->fbLock unlock];
     
     // Normalize to make use of full colorspace
     if (self.lockExposure) {
@@ -538,6 +545,25 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     else {
         frame_one_channel.copyTo(frame_three_channel);
     }
+    
+//    int x = 40;
+//   int y = 1;
+//   int width = 160;
+//   int height = 153;
+//
+//   cv::Point top_left(x, y);
+//   cv::Point bottom_right(x + width, y + height);
+//
+//   // Define the color of the rectangle (B, G, R) - red in this case
+//   cv::Scalar rectangle_color(0, 0, 255); // Red color
+//
+//   // Define the thickness of the border.
+//   // If you set it to CV_FILLED, the rectangle will be filled.
+//   int thickness = 2; // Change this for a thicker or thinner border
+//
+//   // Draw the rectangle on the image
+//   cv::rectangle(frame_three_channel, top_left, bottom_right, rectangle_color, thickness);
+
     
     // Adjust size
     cv::resize(frame_three_channel, frame_three_channel, cv::Size(), self.scaleFactor, self.scaleFactor, cv::INTER_LINEAR);
