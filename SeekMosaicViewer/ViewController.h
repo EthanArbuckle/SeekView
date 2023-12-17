@@ -6,12 +6,12 @@
 //
 
 #import <Cocoa/Cocoa.h>
-#import <SeekConnect/SeekMosaicCamera.h>
+#import <SeekConnect/SeekDevice.h>
 
-@interface ViewController : NSViewController <SeekCameraDelegate>
+@interface ViewController : NSViewController <SeekDeviceDelegate>
 
 @property (nonatomic, retain) NSImageView *thermalImageView;
-@property (nonatomic, retain) SeekMosaicCamera *seekCamera;
+@property (nonatomic, retain) SeekDevice *seekCamera;
 
 @property (nonatomic, retain) NSTextField *fpsTextView;
 

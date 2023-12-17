@@ -14,6 +14,8 @@
 		5F2505A92AE51AEC0089CC50 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 5F2505A82AE51AEC0089CC50 /* main.m */; };
 		5F389C9D2AEA4F12007D534A /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F389C9C2AEA4F11007D534A /* AVFoundation.framework */; };
 		5F389C9F2AEA4F32007D534A /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F389C9E2AEA4F32007D534A /* CoreMedia.framework */; };
+		5F3E49692B2F323A006D392D /* SeekDeviceS104SP.h in Headers */ = {isa = PBXBuildFile; fileRef = 5F3E49672B2F323A006D392D /* SeekDeviceS104SP.h */; };
+		5F3E496A2B2F323A006D392D /* SeekDeviceS104SP.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5F3E49682B2F323A006D392D /* SeekDeviceS104SP.mm */; };
 		5F4AEEDC2AF7B90B00EE7793 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 5F4AEEDB2AF7B90B00EE7793 /* AppDelegate.m */; };
 		5F4AEEDF2AF7B90B00EE7793 /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 5F4AEEDE2AF7B90B00EE7793 /* SceneDelegate.m */; };
 		5F4AEEE22AF7B90B00EE7793 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 5F4AEEE12AF7B90B00EE7793 /* ViewController.m */; };
@@ -23,8 +25,8 @@
 		5F4AEEED2AF7B90B00EE7793 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 5F4AEEEC2AF7B90B00EE7793 /* main.m */; };
 		5F4AEEFC2AF7B95D00EE7793 /* SeekConnect.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F4AEEF62AF7B95D00EE7793 /* SeekConnect.framework */; };
 		5F4AEEFD2AF7B95E00EE7793 /* SeekConnect.framework in Embed Libraries */ = {isa = PBXBuildFile; fileRef = 5F4AEEF62AF7B95D00EE7793 /* SeekConnect.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		5F4AEF012AF7B97000EE7793 /* SeekMosaicCamera.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5FC09C492AF3AB2300E3F6D6 /* SeekMosaicCamera.mm */; };
-		5F4AEF082AF7BA2E00EE7793 /* SeekMosaicCamera.h in Headers */ = {isa = PBXBuildFile; fileRef = 5FC09C4A2AF3AB2300E3F6D6 /* SeekMosaicCamera.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		5F4AEF012AF7B97000EE7793 /* SeekDevice.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5FC09C492AF3AB2300E3F6D6 /* SeekDevice.mm */; };
+		5F4AEF082AF7BA2E00EE7793 /* SeekDevice.h in Headers */ = {isa = PBXBuildFile; fileRef = 5FC09C4A2AF3AB2300E3F6D6 /* SeekDevice.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		5F4AEF092AF7BA3700EE7793 /* seek.h in Headers */ = {isa = PBXBuildFile; fileRef = 5FC09C4D2AF3B08500E3F6D6 /* seek.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		5F4AEF0B2AF7BA6C00EE7793 /* OpenCL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F4AEECA2AF7B78800EE7793 /* OpenCL.framework */; platformFilters = (macos, ); };
 		5F4AEF0D2AF7BA7100EE7793 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F4AEF0C2AF7BA7100EE7793 /* Accelerate.framework */; };
@@ -673,6 +675,8 @@
 		5F2E15002AF8CFF400F5537E /* jailbreak-iOSeekViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "jailbreak-iOSeekViewer.entitlements"; sourceTree = "<group>"; };
 		5F389C9C2AEA4F11007D534A /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		5F389C9E2AEA4F32007D534A /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		5F3E49672B2F323A006D392D /* SeekDeviceS104SP.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SeekDeviceS104SP.h; sourceTree = "<group>"; };
+		5F3E49682B2F323A006D392D /* SeekDeviceS104SP.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SeekDeviceS104SP.mm; sourceTree = "<group>"; };
 		5F4AEEC02AF7930100EE7793 /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
 		5F4AEEC22AF795A700EE7793 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		5F4AEECA2AF7B78800EE7793 /* OpenCL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenCL.framework; path = System/Library/Frameworks/OpenCL.framework; sourceTree = SDKROOT; };
@@ -706,8 +710,8 @@
 		5F4AEF272AF7C03700EE7793 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk/System/Library/Frameworks/UIKit.framework; sourceTree = DEVELOPER_DIR; };
 		5F4AEF292AF7C10D00EE7793 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk/System/Library/Frameworks/CoreGraphics.framework; sourceTree = DEVELOPER_DIR; };
 		5FAFF3552AF91F0D0029E4E2 /* libxpc.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libxpc.tbd; path = usr/lib/system/libxpc.tbd; sourceTree = SDKROOT; };
-		5FC09C492AF3AB2300E3F6D6 /* SeekMosaicCamera.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SeekMosaicCamera.mm; sourceTree = "<group>"; };
-		5FC09C4A2AF3AB2300E3F6D6 /* SeekMosaicCamera.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SeekMosaicCamera.h; sourceTree = "<group>"; };
+		5FC09C492AF3AB2300E3F6D6 /* SeekDevice.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SeekDevice.mm; sourceTree = "<group>"; };
+		5FC09C4A2AF3AB2300E3F6D6 /* SeekDevice.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SeekDevice.h; sourceTree = "<group>"; };
 		5FC09C4D2AF3B08500E3F6D6 /* seek.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = seek.h; sourceTree = "<group>"; };
 		5FF9954D2AEFCB0D0058377A /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		5FF9954F2AEFCB140058377A /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
@@ -2084,8 +2088,10 @@
 			isa = PBXGroup;
 			children = (
 				5FC09C4D2AF3B08500E3F6D6 /* seek.h */,
-				5FC09C4A2AF3AB2300E3F6D6 /* SeekMosaicCamera.h */,
-				5FC09C492AF3AB2300E3F6D6 /* SeekMosaicCamera.mm */,
+				5FC09C4A2AF3AB2300E3F6D6 /* SeekDevice.h */,
+				5FC09C492AF3AB2300E3F6D6 /* SeekDevice.mm */,
+				5F3E49672B2F323A006D392D /* SeekDeviceS104SP.h */,
+				5F3E49682B2F323A006D392D /* SeekDeviceS104SP.mm */,
 			);
 			path = SeekCamera;
 			sourceTree = "<group>";
@@ -2097,7 +2103,8 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5F4AEF082AF7BA2E00EE7793 /* SeekMosaicCamera.h in Headers */,
+				5F3E49692B2F323A006D392D /* SeekDeviceS104SP.h in Headers */,
+				5F4AEF082AF7BA2E00EE7793 /* SeekDevice.h in Headers */,
 				5F4AEF092AF7BA3700EE7793 /* seek.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2256,7 +2263,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5F4AEF012AF7B97000EE7793 /* SeekMosaicCamera.mm in Sources */,
+				5F3E496A2B2F323A006D392D /* SeekDeviceS104SP.mm in Sources */,
+				5F4AEF012AF7B97000EE7793 /* SeekDevice.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

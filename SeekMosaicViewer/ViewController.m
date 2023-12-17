@@ -6,6 +6,7 @@
 //
 
 #import "ViewController.h"
+#import "SeekDeviceS104SP.h"
 
 @interface ViewController () {
     NSDate *sessionStartDate;
@@ -19,9 +20,8 @@
 - (void)viewDidAppear {
     [super viewDidAppear];
     
-    self.seekCamera = [[SeekMosaicCamera alloc] initWithDelegate:self];
+    self.seekCamera = [[SeekDeviceS104SP alloc] initWithDelegate:self];
     self.seekCamera.scaleFactor = 3;
-    
     
     // Setup window and image view to contain the thermal images
     self.view.window.minSize = NSMakeSize(970, 730);
@@ -91,34 +91,34 @@
 }
 
 - (void)addControlsToView:(NSView *)parentView {
-
+    
     CGFloat sliderWidth = parentView.frame.size.width - 20;
     CGFloat sliderHeight = 25.0;
     CGFloat switchWidth = 80.0;
     CGFloat switchHeight = 30.0;
     CGFloat labelHeight = 30.0;
     CGFloat controlSpacing = 10.0;
-
+    
     // Create labels and controls
     NSTextField *minLabel = [self labelWithText:@"Exposure Floor" frame:NSMakeRect(controlSpacing, parentView.bounds.size.height - labelHeight - controlSpacing, sliderWidth, labelHeight)];
     minLabel.backgroundColor = [NSColor clearColor];
     [parentView addSubview:minLabel];
-
-    NSSlider *minSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, minLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:1 maxValue:250 action:@selector(minSliderChanged:)];
-    minSlider.floatValue = self.seekCamera.edgeDetectioneMinThreshold;
+    
+    NSSlider *minSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, minLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:1 maxValue:65535 action:@selector(minSliderChanged:)];
+    minSlider.floatValue = self.seekCamera.exposureMinThreshold;
     [parentView addSubview:minSlider];
-
+    
     NSTextField *maxLabel = [self labelWithText:@"Exposure Ceil" frame:NSMakeRect(controlSpacing, (minSlider.frame.origin.y - controlSpacing - labelHeight) + 5, sliderWidth, labelHeight)];
     maxLabel.backgroundColor = [NSColor clearColor];
     [parentView addSubview:maxLabel];
-
+    
     NSSlider *maxSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, maxLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:1 maxValue:250 action:@selector(maxSliderChanged:)];
-    maxSlider.floatValue = self.seekCamera.edgeDetectionMaxThreshold;
+    maxSlider.floatValue = self.seekCamera.exposureMaxThreshold;
     [parentView addSubview:maxSlider];
-
+    
     NSTextField *edgeDetectionLabel = [self labelWithText:@"Edge Detection:" frame:NSMakeRect(controlSpacing, (maxSlider.frame.origin.y - sliderHeight - controlSpacing) - 5, sliderWidth, labelHeight)];
     [parentView addSubview:edgeDetectionLabel];
-
+    
     NSSwitch *edgeDetectionSwitch = [[NSSwitch alloc] initWithFrame:NSMakeRect(controlSpacing + switchWidth + controlSpacing, maxSlider.frame.origin.y - switchHeight - 5, switchWidth, switchHeight)];
     [edgeDetectionSwitch setTarget:self];
     [edgeDetectionSwitch setAction:@selector(edgeDetectionSwitchToggled:)];
@@ -127,7 +127,7 @@
     
     NSTextField *autoShutterLabel = [self labelWithText:@"Auto Shutter:" frame:NSMakeRect(controlSpacing, edgeDetectionSwitch.frame.origin.y - switchHeight - controlSpacing, sliderWidth, labelHeight)];
     [parentView addSubview:autoShutterLabel];
-
+    
     NSSwitch *autoShutterSwitch = [[NSSwitch alloc] initWithFrame:NSMakeRect(controlSpacing + switchWidth + controlSpacing, edgeDetectionSwitch.frame.origin.y - switchHeight - 5, switchWidth, switchHeight)];
     [autoShutterSwitch setTarget:self];
     [autoShutterSwitch setAction:@selector(autoShutterSwitchToggled:)];
@@ -205,16 +205,16 @@
     self.seekCamera.opencvColormap = (int)sender.tag;
 }
 
-- (void)seekCameraDidConnect:(SeekMosaicCamera *)camera {
+- (void)seekCameraDidConnect:(SeekDevice *)camera {
     NSLog(@"Connected to device: %@", camera.serialNumber);
     self->sessionStartDate = [NSDate now];
 }
 
-- (void)seekCameraDidDisconnect:(SeekMosaicCamera *)camera {
+- (void)seekCameraDidDisconnect:(SeekDevice *)camera {
     NSLog(@"Disconnected from device: %@", camera.serialNumber);
 }
 
-- (void)seekCamera:(SeekMosaicCamera *)camera sentFrame:(NSImage *)frame {
+- (void)seekCamera:(SeekDevice *)camera sentFrame:(NSImage *)frame {
     
     dispatch_sync(dispatch_get_main_queue(), ^{
         
