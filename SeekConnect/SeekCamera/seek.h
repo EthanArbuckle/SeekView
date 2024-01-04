@@ -1,6 +1,6 @@
 //
 //  seek.h
-//  SeekMosaicViewer
+//  SeekConnect
 //
 //  Created by Ethan Arbuckle
 //
@@ -16,11 +16,9 @@
 #define debug_log(...)
 #endif
 
-#define SEEK_MOSAIC_USB_VENDOR_ID 0x289d
+#define SEEK_USB_VENDOR_ID 0x289d
 #define SEEK_MOSAIC_USB_PRODUCT_ID 0x0011
-
-#define S104SP_USB_VENDOR_ID 0x289d
-#define S104SP_USB_PRODUCT_ID 0x0010
+#define SEEK_S104SP_USB_PRODUCT_ID 0x0010
 
 //#define SEEK_MOSAIC_FRAME_HEIGHT 240
 //#define SEEK_MOSAIC_FRAME_RAW_HEIGHT 260
@@ -28,20 +26,11 @@
 //#define SEEK_MOSAIC_FRAME_WIDTH 320
 //#define SEEK_MOSAIC_FRAME_RAW_WIDTH 342
 
-#define S104SP_FRAME_WIDTH 207
+#define S104SP_FRAME_WIDTH 208
 #define S104SP_FRAME_HEIGHT 154
 
-#define S104SP_FRAME_RAW_WIDTH 208
-#define S104SP_FRAME_RAW_HEIGHT 156
-//#define S104SP_FRAME_RAW_WIDTH 208  // Adding a margin of 1 pixel on each side
-//#define S104SP_FRAME_RAW_HEIGHT 156 // Adding a margin of 1 pixel on top and bottom
-
-
 #define SEEK_FRAME_CURRENT_FRAME_COUNT_INDEX 1
-#define S104SP_FRAME_CURRENT_FRAME_COUNT_INDEX 40
-
 #define SEEK_FRAME_TYPE_INDEX 2
-#define S104SP_FRAME_TYPE_INDEX 10
 
 #define SEEK_FRAME_TYPE_FSC_CALIBRATION 1
 #define SEEK_FRAME_TYPE_IMAGE 3

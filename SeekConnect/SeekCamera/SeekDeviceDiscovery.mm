@@ -7,6 +7,7 @@
 
 #import "SeekDeviceDiscovery.h"
 #import <libusb.h>
+#import "SeekDeviceS104SP.h"
 
 
 @interface SeekDeviceDiscovery () {
@@ -16,58 +17,41 @@
     libusb_context *libusb_ctx;
 }
 
+- (void)_handleCallbackForS104SP:(libusb_device *)usb_device;
+
 @end
 
-SeekDeviceDiscovery *omgHack = nil;
-
-void callback_function(libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data) {
+void usb_callback_s104sp(libusb_context *ctx, libusb_device *usb_device, libusb_hotplug_event event, void *user_data) {
     
-    debug_log("found a new device %p\n", device);
-
-    libusb_device_handle *dev = NULL;
-    if (libusb_open(device, &dev) != LIBUSB_SUCCESS) {
-        debug_log("libusb_open failed\n");
-        return;
-    }
-    
-    if (libusb_kernel_driver_active(dev, 0) && libusb_detach_kernel_driver(dev, 0) < 0) {
-        debug_log("libusb_detach_kernel_driver failed\n");
-        libusb_close(dev);
-        return;
-    }
-    
-    if (libusb_set_configuration(dev, 1) < 0) {
-        debug_log("libusb_set_configuration failed\n");
-        libusb_close(dev);
-        return;
-    }
-
-    debug_log("attempting to connect to the device\n");
-    int connected = 0;
-    for (int i = 0; i < 5; i++) {
-        
-        if (libusb_claim_interface(dev, 0) == LIBUSB_SUCCESS) {
-            
-            debug_log("succesfully claimed usb interface\n");
-            connected = 1;
-            
-            [omgHack _notifyHandlersOfDevice:dev];
-            
-            return;
-        }
-        
-        debug_log("libusb_claim_interface failed (attempt %d)\n", i);
-    }
-    
-    if (connected == 0) {
-        printf("failed to connect to the device\n");
-        libusb_close(dev);
-    }
+    debug_log("discoverer found a new s104sp device %p\n", usb_device);
+    [[SeekDeviceDiscovery discoverer] _handleCallbackForS104SP:usb_device];
 }
 
 @implementation SeekDeviceDiscovery
 
 - (id)init {
+
+    [[NSException exceptionWithName:@"SeekDeviceDiscovery" reason:@"Use +discoverer intead of -init" userInfo:nil] raise];
+    return nil;
+}
+
++ (id)discoverer {
+    
+    static dispatch_once_t onceToken;
+    static SeekDeviceDiscovery *sharedDiscoverer;
+    dispatch_once(&onceToken, ^{
+        sharedDiscoverer = [[SeekDeviceDiscovery alloc] _initShared];
+    });
+    
+    if (!sharedDiscoverer) {
+        debug_log("cannot proceed with without a discoverer\n");
+        [[NSException exceptionWithName:@"SeekDeviceDiscovery" reason:@"Failed to create a device discoverer. Check libusb" userInfo:nil] raise];
+    }
+    
+    return sharedDiscoverer;
+}
+
+- (id)_initShared {
     
     if ((self = [super init])) {
         
@@ -80,15 +64,13 @@ void callback_function(libusb_context *ctx, libusb_device *device, libusb_hotplu
             debug_log("libusb_init context failed\n");
             return nil;
         }
-        
-        omgHack = self;
     }
     
     return self;
 }
 
 
-- (void)addDiscoveryHandler:(void (^)(SeekMosaicCamera *device))discoveryHandler {
+- (void)addDiscoveryHandler:(void (^)(SeekDevice *device))discoveryHandler {
     
     [self->discoveryHandlers addObject:discoveryHandler];
 }
@@ -100,9 +82,7 @@ void callback_function(libusb_context *ctx, libusb_device *device, libusb_hotplu
     }
     
     self.isDiscovering = YES;
-    libusb_hotplug_register_callback(self->libusb_ctx, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED, LIBUSB_HOTPLUG_ENUMERATE, S104SP_USB_VENDOR_ID, S104SP_USB_PRODUCT_ID, LIBUSB_HOTPLUG_MATCH_ANY, (libusb_hotplug_callback_fn)callback_function, NULL, NULL);
-
-//    [self _beginDeviceDiscovery];
+    libusb_hotplug_register_callback(self->libusb_ctx, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED, LIBUSB_HOTPLUG_ENUMERATE, S104SP_USB_VENDOR_ID, S104SP_USB_PRODUCT_ID, LIBUSB_HOTPLUG_MATCH_ANY, (libusb_hotplug_callback_fn)usb_callback_s104sp, NULL, NULL);
 }
 
 - (void)stopDiscovery {
@@ -110,77 +90,24 @@ void callback_function(libusb_context *ctx, libusb_device *device, libusb_hotplu
     self.isDiscovering = NO;
 }
 
-- (void)_notifyHandlersOfDevice:(libusb_device_handle *)dev {
+- (void)_handleCallbackForS104SP:(libusb_device *)usb_device {
+    
+    libusb_device_handle *device_handle = NULL;
+    if (libusb_open(usb_device, &device_handle) != LIBUSB_SUCCESS) {
+        debug_log("libusb_open failed. Not notifying listeners\n");
+        return;
+    }
+    
+    SeekDevice *camera = [[SeekDeviceS104SP alloc] initWithDeviceHandle:device_handle delegate:nil];
+    if (!camera) {
+        debug_log("Camera creation failed. Not notifying listeners\n");
+        return;
+    }
     
     // Notify handlers
-    for (void (^discoveryHandler)(SeekMosaicCamera *device) in self->discoveryHandlers) {
-        
-        SeekMosaicCamera *camera = [[SeekMosaicCamera alloc] initWithHandle:dev delegate:nil];
+    for (void (^discoveryHandler)(SeekDevice *device) in self->discoveryHandlers) {
         discoveryHandler(camera);
     }
-
-    return;
-
-    dispatch_async(device_discovery_queue, ^{
-        
-        while (self.isDiscovering) {
-            
-            libusb_device_handle *dev = NULL;
-            while ((dev = libusb_open_device_with_vid_pid(self->libusb_ctx, S104SP_USB_VENDOR_ID, S104SP_USB_PRODUCT_ID)) == NULL) {
-                debug_log("waiting for device...\n");
-                sleep(1);
-            }
-            
-            debug_log("found a new device\n");
-            
-            if (libusb_kernel_driver_active(dev, 0) && libusb_detach_kernel_driver(dev, 0) < 0) {
-                debug_log("libusb_detach_kernel_driver failed\n");
-                libusb_close(dev);
-                continue;
-            }
-            
-            if (libusb_set_configuration(dev, 1) < 0) {
-                debug_log("libusb_set_configuration failed\n");
-                libusb_close(dev);
-                continue;
-            }
-
-            debug_log("attempting to connect to the device\n");
-            int connected = 0;
-            for (int i = 0; i < 5; i++) {
-                
-                if (libusb_claim_interface(dev, 0) == LIBUSB_SUCCESS) {
-                    
-                    debug_log("succesfully claimed usb interface\n");
-                    connected = 1;
-                    
-                    // Notify handlers
-                    for (void (^discoveryHandler)(SeekMosaicCamera *device) in self->discoveryHandlers) {
-                        
-                        SeekMosaicCamera *camera = [[SeekMosaicCamera alloc] initWithHandle:dev delegate:nil];
-                        discoveryHandler(camera);
-                    }
-                    
-                    break;
-                }
-                
-                debug_log("libusb_claim_interface failed (attempt %d)\n", i);
-            }
-            
-            if (connected == 0) {
-                printf("failed to connect to the device\n");
-                libusb_close(dev);
-            }
-/*
-#if !(TARGET_OS_OSX)
-            [self _killProcessesWithClaimsOnInterface];
-#endif
-*/
-            sleep(1);
-        }
-
-        debug_log("device_discovery_queue terminated\n");
-    });
 }
 
 @end

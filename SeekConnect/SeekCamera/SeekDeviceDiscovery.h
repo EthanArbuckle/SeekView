@@ -5,9 +5,10 @@
 //  Created by Ethan Arbuckle on 12/8/23.
 //
 
-#import "SeekMosaicCamera.h"
+#import "SeekDevice.h"
 #import "seek.h"
 #import <Foundation/Foundation.h>
+#import <libusb.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -15,10 +16,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic) BOOL isDiscovering;
 
-- (void)addDiscoveryHandler:(void (^)(SeekMosaicCamera *device))discoveryHandler;
++ (id)discoverer;
+- (void)addDiscoveryHandler:(void (^)(SeekDevice *device))discoveryHandler;
 - (void)startDiscovery;
 - (void)stopDiscovery;
-- (void)_notifyHandlersOfDevice:(void *)dev;
 
 @end
 

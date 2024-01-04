@@ -1,29 +1,33 @@
 //
-//  SeekMosaicCamera.h
-//  SeekMosaicViewer
+//  SeekDevice.h
+//  SeekConect
 //
 //  Created by Ethan Arbuckle
 //
 
 #import <opencv2/opencv.hpp>
 #import <Foundation/Foundation.h>
+#import <libusb.h>
 
 typedef NS_ENUM(NSUInteger, SeekCameraShutterMode) {
     SeekCameraShutterModeAuto = 0,
     SeekCameraShutterModeManual
 };
 
-@class SeekMosaicCamera;
+@class SeekDevice;
 
-@protocol SeekCameraDelegate <NSObject>
-- (void)seekCameraDidConnect:(SeekMosaicCamera *)camera;
-- (void)seekCameraDidDisconnect:(SeekMosaicCamera *)camera;
-- (void)seekCamera:(SeekMosaicCamera *)camera sentFrame:(id)frame;
+@protocol SeekDeviceDelegate <NSObject>
+- (void)seekCameraDidConnect:(SeekDevice *)device;
+- (void)seekCameraDidDisconnect:(SeekDevice *)device;
+- (void)seekCamera:(SeekDevice *)device sentFrame:(id)frame;
 @end
 
-@interface SeekMosaicCamera : NSObject
+@interface SeekDevice : NSObject {
+    
+    libusb_device_handle *usb_camera_handle;
+}
 
-@property (nonatomic, strong) id<SeekCameraDelegate> delegate;
+@property (nonatomic, strong) id<SeekDeviceDelegate> delegate;
 @property (nonatomic, retain) NSString *serialNumber;
 @property (atomic) int frameCount;
 
@@ -42,11 +46,12 @@ typedef NS_ENUM(NSUInteger, SeekCameraShutterMode) {
 @property (nonatomic) double edgeDetectioneMinThreshold;
 @property (nonatomic) double edgeDetectionMaxThreshold;
 
-- (id)initWithHandle:(void *)dev delegate:(id<SeekCameraDelegate>)delegate;
+- (id)initWithHandle:(libusb_device_handle *)dev delegate:(id<SeekDeviceDelegate>)delegate;
 - (void)start;
 - (void)toggleShutter;
 - (void)resetExposureThresholds;
 - (void)setAccum:(cv::Mat)mat;
+- (kern_return_t)_requestFrameFromCamera;
 
 @end
 
