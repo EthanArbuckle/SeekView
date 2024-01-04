@@ -11,16 +11,25 @@
 
 @interface ViewController () {
     NSDate *sessionStartDate;
-    SeekDeviceDiscovery *deviceDiscoverer;
     NSMutableArray *activeDevices;
-    cv::Mat root_accumulator;
     int combined_frame_count;
+    SeekCameraShutterMode currentShutterMode;
+    BOOL edgeDetectionEnabled;
+    BOOL lockExposure;
+    int exposureMinThreshold;
+    int exposureMaxThreshold;
+    int edgeDetectionPerimeterSize;
+    int blurFactor;
+    BOOL performLastPassErosion;
+    NSMutableAttributedString *fpsLabelString;
 }
 
-@end
+@property (nonatomic, retain) NSSlider *exposureMinThresholdSlider;
+@property (nonatomic, retain) NSSlider *exposureMaxThresholdSlider;
+@property (nonatomic, retain) NSSlider *guassianBlurSlider;
+@property (nonatomic, retain) NSSlider *edgeDetectionPerimeterSlider;
 
-int x_offset = 0;
-int y_offset = 0;
+@end
 
 @implementation ViewController
 
@@ -28,16 +37,30 @@ int y_offset = 0;
     [super viewDidAppear];
     
     self->activeDevices = [[NSMutableArray alloc] init];
-    self->deviceDiscoverer = [[SeekDeviceDiscovery alloc] init];
+    self->currentShutterMode = SeekCameraShutterModeAuto;
+    self->edgeDetectionEnabled = NO;
+    self->lockExposure = YES;
+    self->exposureMaxThreshold = -1;
+    self->exposureMinThreshold = -1;
+    self->blurFactor = -1;
+    self->edgeDetectionPerimeterSize = -1;
+    self->performLastPassErosion = YES;
     
-    __block typeof(self) weakSelf = self;
-    [self->deviceDiscoverer addDiscoveryHandler:^(SeekDevice * _Nonnull device) {
+    self->fpsLabelString = [[NSMutableAttributedString alloc] initWithString:@"..." attributes:@{
+        NSStrokeWidthAttributeName: @-3.0,
+        NSStrokeColorAttributeName:[NSColor blackColor],
+        NSForegroundColorAttributeName:[NSColor whiteColor],
+        NSFontAttributeName: [NSFont fontWithName:@"HelveticaNeue-Bold" size:34]
+    }];
+    
+    [[SeekDeviceDiscovery discoverer] addDiscoveryHandler:^(SeekDevice * _Nonnull device) {
         
-        [device setDelegate:weakSelf];
-        //        [device setAccum:weakSelf->root_accumulator];
+        [device setDelegate:self];
+        device.shutterMode = self->currentShutterMode;
+        device.edgeDetection = self->edgeDetectionEnabled;
+        device.lockExposure = self->lockExposure;
+        device.performLastPassErosion = self->performLastPassErosion;
         [device start];
-        
-        [weakSelf->activeDevices addObject:device];
     }];
     
     // Setup window and image view to contain the thermal images
@@ -45,7 +68,7 @@ int y_offset = 0;
     self.thermalImageView = [[NSImageView alloc] initWithFrame:NSMakeRect(10, 10, 960, 720)];
     [self.thermalImageView setWantsLayer:YES];
     [[self.thermalImageView layer] setBackgroundColor:[NSColor clearColor].CGColor];
-    self.thermalImageView.alphaValue = 1;//0.50;
+    self.thermalImageView.alphaValue = 0.75;
     self.thermalImageView.imageScaling = NSImageScaleNone;
     [self.view addSubview:self.thermalImageView];
     
@@ -53,7 +76,7 @@ int y_offset = 0;
     self.thermalImageView2 = [[NSImageView alloc] initWithFrame:NSMakeRect(10, 10, 960, 720)];
     [self.thermalImageView2 setWantsLayer:YES];
     [[self.thermalImageView2 layer] setBackgroundColor:[NSColor clearColor].CGColor];
-    self.thermalImageView2.alphaValue = 0.50;
+    self.thermalImageView2.alphaValue = 0.75;
     self.thermalImageView2.imageScaling = NSImageScaleNone;
     [self.view addSubview:self.thermalImageView2];
     
@@ -62,15 +85,16 @@ int y_offset = 0;
     self.fpsTextView.alignment = NSTextAlignmentRight;
     self.fpsTextView.bordered = NO;
     self.fpsTextView.enabled = NO;
+    self.fpsTextView.placeholderAttributedString = self->fpsLabelString;
     [self.thermalImageView addSubview:self.fpsTextView];
     
-    NSView *colorMapContainerView = [[NSView alloc] initWithFrame:NSMakeRect(self.thermalImageView.frame.size.width + 20, 10, 300, 220)];
+    NSView *colorMapContainerView = [[NSView alloc] initWithFrame:NSMakeRect(self.thermalImageView.frame.size.width + 20, 10, 300, 240)];
     [colorMapContainerView setWantsLayer:YES];
     colorMapContainerView.layer.backgroundColor = [NSColor lightGrayColor].CGColor;
     [self addColormapButtonsToView:colorMapContainerView];
     [self.view addSubview:colorMapContainerView];
     
-    NSView *edgeDetectionContainerView = [[NSView alloc] initWithFrame:NSMakeRect(self.thermalImageView.frame.size.width + 20, colorMapContainerView.frame.origin.y + colorMapContainerView.frame.size.height + 10, 300, 200)];
+    NSView *edgeDetectionContainerView = [[NSView alloc] initWithFrame:NSMakeRect(self.thermalImageView.frame.size.width + 20, colorMapContainerView.frame.origin.y + colorMapContainerView.frame.size.height + 10, 300, 260)];
     [edgeDetectionContainerView setWantsLayer:YES];
     edgeDetectionContainerView.layer.backgroundColor = [NSColor lightGrayColor].CGColor;
     [self addControlsToView:edgeDetectionContainerView];
@@ -78,7 +102,7 @@ int y_offset = 0;
     
     self->combined_frame_count = 0;
     
-    [self->deviceDiscoverer startDiscovery];
+    [[SeekDeviceDiscovery discoverer] startDiscovery];
 }
 
 - (void)addColormapButtonsToView:(NSView *)parentView {
@@ -133,25 +157,46 @@ int y_offset = 0;
     minLabel.backgroundColor = [NSColor clearColor];
     [parentView addSubview:minLabel];
     
-    NSSlider *minSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, minLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:1 maxValue:65535 action:@selector(minSliderChanged:)];
-    minSlider.floatValue = self.seekCamera.exposureMinThreshold;
-    [parentView addSubview:minSlider];
+    self.exposureMinThresholdSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, minLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:100 maxValue:16500 action:@selector(minSliderChanged:)];
+    self.exposureMinThresholdSlider.floatValue = self->exposureMinThreshold;
+    [parentView addSubview:self.exposureMinThresholdSlider];
     
-    NSTextField *maxLabel = [self labelWithText:@"Exposure Ceil" frame:NSMakeRect(controlSpacing, (minSlider.frame.origin.y - controlSpacing - labelHeight) + 5, sliderWidth, labelHeight)];
+    NSTextField *maxLabel = [self labelWithText:@"Exposure Ceil" frame:NSMakeRect(controlSpacing, (self.exposureMinThresholdSlider.frame.origin.y - controlSpacing - labelHeight) + 5, sliderWidth, labelHeight)];
     maxLabel.backgroundColor = [NSColor clearColor];
     [parentView addSubview:maxLabel];
     
-    NSSlider *maxSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, maxLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:1 maxValue:250 action:@selector(maxSliderChanged:)];
-    maxSlider.floatValue = self.seekCamera.exposureMaxThreshold;
-    [parentView addSubview:maxSlider];
+    self.exposureMaxThresholdSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, maxLabel.frame.origin.y - controlSpacing, sliderWidth, sliderHeight) minValue:15000 maxValue:32000 action:@selector(maxSliderChanged:)];
+    self.exposureMaxThresholdSlider.floatValue = self->exposureMaxThreshold;
+    [parentView addSubview:self.exposureMaxThresholdSlider];
     
-    NSTextField *edgeDetectionLabel = [self labelWithText:@"Edge Detection:" frame:NSMakeRect(controlSpacing, (maxSlider.frame.origin.y - sliderHeight - controlSpacing) - 5, sliderWidth, labelHeight)];
+    self.guassianBlurSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, controlSpacing + sliderHeight, sliderWidth, sliderHeight) minValue:0 maxValue:9 action:@selector(handleGuassianBlurSliderChanges:)];
+    self.guassianBlurSlider.intValue = self->blurFactor;
+    self.guassianBlurSlider.altIncrementValue = 1;
+    self.guassianBlurSlider.numberOfTickMarks = 7;
+    [parentView addSubview:self.guassianBlurSlider];
+    
+    NSTextField *blurSliderText = [self labelWithText:@"Blur Factor" frame:NSMakeRect(controlSpacing, (self.guassianBlurSlider.frame.origin.y - controlSpacing - labelHeight) + 5, sliderWidth, labelHeight)];
+    blurSliderText.backgroundColor = [NSColor clearColor];
+    [parentView addSubview:blurSliderText];
+    
+    self.edgeDetectionPerimeterSlider = [self sliderWithFrame:NSMakeRect(controlSpacing, controlSpacing, sliderWidth, sliderHeight) minValue:1 maxValue:10 action:@selector(handleEdgeDetectionParameterSlider:)];
+    self.edgeDetectionPerimeterSlider.intValue = self->edgeDetectionPerimeterSize;
+    self.edgeDetectionPerimeterSlider.altIncrementValue = 1;
+    self.edgeDetectionPerimeterSlider.numberOfTickMarks = 10;
+    [parentView addSubview:self.edgeDetectionPerimeterSlider];
+    
+    NSTextField *edgePerimeterSizeText = [self labelWithText:@"Edge Perimeter Size" frame:NSMakeRect(controlSpacing, (self.edgeDetectionPerimeterSlider.frame.origin.y - controlSpacing - labelHeight) + 5, sliderWidth, labelHeight)];
+    edgePerimeterSizeText.backgroundColor = [NSColor clearColor];
+    [parentView addSubview:edgePerimeterSizeText];
+    
+    
+    NSTextField *edgeDetectionLabel = [self labelWithText:@"Edge Detection:" frame:NSMakeRect(controlSpacing, (self.exposureMaxThresholdSlider.frame.origin.y - sliderHeight - controlSpacing) - 5, sliderWidth, labelHeight)];
     [parentView addSubview:edgeDetectionLabel];
     
-    NSSwitch *edgeDetectionSwitch = [[NSSwitch alloc] initWithFrame:NSMakeRect(controlSpacing + switchWidth + controlSpacing, maxSlider.frame.origin.y - switchHeight - 5, switchWidth, switchHeight)];
+    NSSwitch *edgeDetectionSwitch = [[NSSwitch alloc] initWithFrame:NSMakeRect(controlSpacing + switchWidth + controlSpacing, self.exposureMaxThresholdSlider.frame.origin.y - switchHeight - 5, switchWidth, switchHeight)];
     [edgeDetectionSwitch setTarget:self];
     [edgeDetectionSwitch setAction:@selector(edgeDetectionSwitchToggled:)];
-    edgeDetectionSwitch.state = self.seekCamera.edgeDetection ? NSControlStateValueOn : NSControlStateValueOff;
+    edgeDetectionSwitch.state = self->edgeDetectionEnabled ? NSControlStateValueOn : NSControlStateValueOff;
     [parentView addSubview:edgeDetectionSwitch];
     
     NSTextField *autoShutterLabel = [self labelWithText:@"Auto Shutter:" frame:NSMakeRect(controlSpacing, edgeDetectionSwitch.frame.origin.y - switchHeight - controlSpacing, sliderWidth, labelHeight)];
@@ -160,8 +205,14 @@ int y_offset = 0;
     NSSwitch *autoShutterSwitch = [[NSSwitch alloc] initWithFrame:NSMakeRect(controlSpacing + switchWidth + controlSpacing, edgeDetectionSwitch.frame.origin.y - switchHeight - 5, switchWidth, switchHeight)];
     [autoShutterSwitch setTarget:self];
     [autoShutterSwitch setAction:@selector(autoShutterSwitchToggled:)];
-    autoShutterSwitch.state = self.seekCamera.shutterMode == SeekCameraShutterModeAuto ? NSControlStateValueOn : NSControlStateValueOff;
+    autoShutterSwitch.state = self->currentShutterMode == SeekCameraShutterModeAuto ? NSControlStateValueOn : NSControlStateValueOff;
     [parentView addSubview:autoShutterSwitch];
+    
+    NSSwitch *lastPassErosionSwitch = [[NSSwitch alloc] initWithFrame:NSMakeRect(controlSpacing + switchWidth + controlSpacing + 60, edgeDetectionSwitch.frame.origin.y - switchHeight - 5, switchWidth, switchHeight)];
+    [lastPassErosionSwitch setTarget:self];
+    [lastPassErosionSwitch setAction:@selector(handleLastPassErosionSwitch:)];
+    lastPassErosionSwitch.state = self->performLastPassErosion ? NSControlStateValueOn : NSControlStateValueOff;
+    [parentView addSubview:lastPassErosionSwitch];
     
     NSButton *toggleShutterButton = [[NSButton alloc] initWithFrame:NSMakeRect(controlSpacing, autoShutterSwitch.frame.origin.y - switchHeight - 10, 130, 45)];
     [toggleShutterButton setBezelColor:[NSColor lightGrayColor]];
@@ -192,22 +243,62 @@ int y_offset = 0;
 }
 
 - (void)minSliderChanged:(NSSlider *)sender {
-    x_offset = [sender doubleValue];
-    //    [self.seekCamera setExposureMinThreshold:[sender doubleValue]];
+    self->exposureMinThreshold = sender.floatValue;
+    for (SeekDevice *device in self->activeDevices) {
+        [device setExposureMinThreshold:[sender doubleValue]];
+    }
 }
 
 - (void)maxSliderChanged:(NSSlider *)sender {
-    //    offset = [sender doubleValue];
-    y_offset = [sender doubleValue];
-    //    [self.seekCamera setExposureMaxThreshold:[sender doubleValue]];
+    self->exposureMaxThreshold = sender.floatValue;
+    for (SeekDevice *device in self->activeDevices) {
+        [device setExposureMaxThreshold:[sender doubleValue]];
+    }
+}
+
+- (void)handleGuassianBlurSliderChanges:(NSSlider *)sender {
+    
+    int odd_slider_value = sender.intValue;
+    if (odd_slider_value % 2 == 0) {
+        odd_slider_value += 1;
+        sender.intValue = odd_slider_value;
+    }
+    
+    self->blurFactor = odd_slider_value;
+    for (SeekDevice *device in self->activeDevices) {
+        [device setBlurFactor:self->blurFactor];
+    }
+}
+
+- (void)handleEdgeDetectionParameterSlider:(NSSlider *)sender {
+    self->edgeDetectionPerimeterSize = sender.intValue;
+    for (SeekDevice *device in self->activeDevices) {
+        [device setEdgeDetectionPerimeterSize:self->edgeDetectionPerimeterSize];
+    }
 }
 
 - (void)edgeDetectionSwitchToggled:(NSSwitch *)sender {
-    self.seekCamera.edgeDetection = sender.state == NSControlStateValueOn;
+    self->edgeDetectionEnabled = sender.state == NSControlStateValueOn;
+    
+    for (SeekDevice *device in self->activeDevices) {
+        device.edgeDetection = self->edgeDetectionEnabled;
+    }
 }
 
 - (void)autoShutterSwitchToggled:(NSSwitch *)sender {
-    self.seekCamera.shutterMode = sender.state == NSControlStateValueOn ? SeekCameraShutterModeAuto : SeekCameraShutterModeManual;
+    self->currentShutterMode = sender.state == NSControlStateValueOn ? SeekCameraShutterModeAuto : SeekCameraShutterModeManual;
+    
+    for (SeekDevice *device in self->activeDevices) {
+        device.shutterMode = self->currentShutterMode;
+    }
+}
+
+- (void)handleLastPassErosionSwitch:(NSSwitch *)sender {
+    self->performLastPassErosion = sender.state == NSControlStateValueOn;
+    
+    for (SeekDevice *device in self->activeDevices) {
+        device.performLastPassErosion = self->performLastPassErosion;
+    }
 }
 
 - (void)toggleShutter {
@@ -226,7 +317,7 @@ int y_offset = 0;
     thermalImageViewFrame.origin.y = (windowHeight / 2) - (imageViewHeight / 2);
     self.thermalImageView.frame = thermalImageViewFrame;
     
-    thermalImageViewFrame.origin.y = 20;
+    thermalImageViewFrame.origin.x += 129;
     self.thermalImageView2.frame = thermalImageViewFrame;
 }
 
@@ -235,38 +326,63 @@ int y_offset = 0;
     for (SeekDevice *device in self->activeDevices) {
         
         if (sender.tag == 23) {
+            
+            self->exposureMinThreshold = -1;
+            self->exposureMaxThreshold = -1;
             [device resetExposureThresholds];
-            return;
+            continue;
         }
         
         device.opencvColormap = (int)sender.tag;
     }
 }
 
-- (void)seekCameraDidConnect:(SeekDevice *)camera {
-    NSLog(@"Connected to device: %@", camera.serialNumber);
+- (void)seekCameraDidConnect:(SeekDevice *)device {
+    
+    if ([self->activeDevices containsObject:device]) {
+        debug_log("seekCameraDidConnect fired for a device already being tracked: %s\n", device.serialNumber.UTF8String);
+        return;
+    }
+    
+    [self->activeDevices addObject:device];
+    NSLog(@"Connected to device: %@", device.serialNumber);
     self->sessionStartDate = [NSDate now];
+    
+    void (^updateLocalInfoAndUIComponents)(void) = ^void(void) {
+        if (self->exposureMinThreshold == -1) {
+            self->exposureMinThreshold = device.exposureMinThreshold;
+            self.exposureMinThresholdSlider.floatValue = self->exposureMinThreshold;
+        }
+        
+        if (self->exposureMaxThreshold == -1) {
+            self->exposureMaxThreshold = device.exposureMaxThreshold;
+            self.exposureMaxThresholdSlider.floatValue = self->exposureMaxThreshold;
+        }
+        
+        if (self->blurFactor == -1) {
+            self->blurFactor = device.blurFactor;
+            self.guassianBlurSlider.floatValue = device.blurFactor;
+        }
+        
+        if (self->edgeDetectionPerimeterSize == -1) {
+            self->edgeDetectionPerimeterSize = device.edgeDetectionPerimeterSize;
+            self.edgeDetectionPerimeterSlider.intValue = self->edgeDetectionPerimeterSize;
+        }
+    };
+
+    if ([[NSThread currentThread] isMainThread]) {
+        updateLocalInfoAndUIComponents();
+    }
+    else {
+        dispatch_sync(dispatch_get_main_queue(), updateLocalInfoAndUIComponents);
+    }
 }
 
 - (void)seekCameraDidDisconnect:(SeekDevice *)camera {
-    NSLog(@"Disconnected from device: %@", camera.serialNumber);
-}
-
-- (NSImage *)offsetImage:(NSImage *)image xOffset:(CGFloat)xOffset yOffset:(CGFloat)yOffset {
-    // Create a new NSImage with the same size as the original
-    NSImage *offsetImage = [[NSImage alloc] initWithSize:[image size]];
-    
-    [offsetImage lockFocus];
-    
-    // Calculate the new origin point
-    NSRect newRect = NSMakeRect(xOffset, yOffset, [image size].width, [image size].height);
-    
-    // Draw the original image in the new position
-    [image drawInRect:newRect fromRect:NSZeroRect operation:NSCompositingOperationCopy fraction:1.0];
-    
-    [offsetImage unlockFocus];
-    
-    return offsetImage;
+    if ([self->activeDevices containsObject:camera]) {
+        NSLog(@"Disconnected from device: %@", camera.serialNumber);
+        [self->activeDevices removeObject:camera];
+    }
 }
 
 - (void)seekCamera:(SeekDevice *)camera sentFrame:(NSImage *)frame {
@@ -274,20 +390,9 @@ int y_offset = 0;
     dispatch_sync(dispatch_get_main_queue(), ^{
         
         if ([camera.serialNumber containsString:@"21D"]) {
-            
-            CGFloat xOffset = x_offset;//camera.edgeDetectioneMinThreshold; // Adjust as necessary
-            CGFloat yOffset = y_offset;  // Adjust if vertical offset is also needed
-            //            NSImage *adjustedImage = [self offsetImage:frame xOffset:xOffset yOffset:yOffset];
-            //            NSLog(@"2 %@", self.thermalImageView2);
-            NSRect baseFrameRect = self.thermalImageView.frame;
-            NSRect overlayedFrameRect = self.thermalImageView2.frame;
-            overlayedFrameRect.origin.x = baseFrameRect.origin.x + x_offset;
-            overlayedFrameRect.origin.y = baseFrameRect.origin.y + y_offset;
-            self.thermalImageView2.frame = overlayedFrameRect;
             self.thermalImageView2.image = frame;
         }
         else {
-            //            NSLog(@"1 %@", self.thermalImageView);
             self.thermalImageView.image = frame;
         }
         
@@ -299,19 +404,29 @@ int y_offset = 0;
             self->combined_frame_count += 1;
             NSTimeInterval streamDuration = [[NSDate now] timeIntervalSinceDate:self->sessionStartDate];
             float fps = self->combined_frame_count / streamDuration;
-            NSAttributedString *attr = [[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%.2f fps", fps] attributes:@{
-                NSStrokeWidthAttributeName: @-3.0,
-                NSStrokeColorAttributeName:[NSColor blackColor],
-                NSForegroundColorAttributeName:[NSColor whiteColor],
-                NSFontAttributeName: [NSFont fontWithName:@"HelveticaNeue-Bold" size:34]
-            }];
+            [self->fpsLabelString replaceCharactersInRange:NSMakeRange(0, self->fpsLabelString.string.length) withString:[NSString stringWithFormat:@"%.2f fps", fps]];
+            [self.fpsTextView setPlaceholderAttributedString:self->fpsLabelString];
             
-            self.fpsTextView.placeholderAttributedString = attr;
+            if (self->exposureMinThreshold == -1) {
+                self->exposureMinThreshold = camera.exposureMinThreshold;
+                self->exposureMaxThreshold = camera.exposureMaxThreshold;
+                
+                self.exposureMinThresholdSlider.floatValue = self->exposureMinThreshold;
+                self.exposureMaxThresholdSlider.floatValue = self->exposureMaxThreshold;
+            }
         }
         
-        for (SeekDevice *device in self->activeDevices) {
-            if (device.shutterMode == SeekCameraShutterModeManual && (device.frameCount % 1000) == 0) {
-                [device toggleShutter];
+        if ([self->activeDevices count] > 1 && self->exposureMinThreshold > 0) {
+            
+            for (SeekDevice *device in self->activeDevices) {
+                
+                if (device.exposureMinThreshold != self->exposureMinThreshold) {
+                    [device setExposureMinThreshold:self->exposureMinThreshold];
+                }
+                
+                if (device.exposureMaxThreshold != self->exposureMaxThreshold) {
+                    [device setExposureMaxThreshold:self->exposureMaxThreshold];
+                }
             }
         }
     });

@@ -18,7 +18,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.seekCamera = [[SeekMosaicCamera alloc] initWithDelegate:self];
+//    self.seekCamera = [[SeekDevice alloc] initWithDelegate:self];
     self.seekCamera.shutterMode = SeekCameraShutterModeManual;
     self.seekCamera.scaleFactor = 3;
     
@@ -36,7 +36,7 @@
     [toggleShutterButton setTitle:@"Shutter" forState:UIControlStateNormal];
     [toggleShutterButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     [toggleShutterButton setFont:[UIFont boldSystemFontOfSize:14]];
-    [toggleShutterButton addTarget:self.seekCamera action:@selector(toggleShutter) forControlEvents:UIControlEventTouchUpInside];
+//    [toggleShutterButton addTarget:self.seekCamera action:@selector(toggleShutter) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:toggleShutterButton];
     
     NSAttributedString *attr = [[NSAttributedString alloc] initWithString:@"waiting for camera" attributes:@{
@@ -50,19 +50,30 @@
     
     [self.thermalImageView addSubview:self.fpsTextView];
 
-    [self.seekCamera start];
+//    [self.seekCamera start];
+    [[SeekDeviceDiscovery discoverer] addDiscoveryHandler:^(SeekDevice * _Nonnull device) {
+        
+        [device setDelegate:self];
+//        device.shutterMode = self->currentShutterMode;
+//        device.edgeDetection = self->edgeDetectionEnabled;
+//        device.lockExposure = self->lockExposure;
+//        device.performLastPassErosion = self->performLastPassErosion;
+        [device start];
+    }];
 }
 
-- (void)seekCameraDidConnect:(SeekMosaicCamera *)camera {
-    NSLog(@"Connected to device: %@", camera.serialNumber);
+- (void)seekCameraDidConnect:(SeekDevice *)device {
+    NSLog(@"Connected to device: %@", device.serialNumber);
     self->sessionStartDate = [NSDate now];
+    self.seekCamera = device;
 }
 
-- (void)seekCameraDidDisconnect:(SeekMosaicCamera *)camera {
-    NSLog(@"Disconnected from device: %@", camera.serialNumber);
+- (void)seekCameraDidDisconnect:(SeekDevice *)device {
+    NSLog(@"Disconnected from device: %@", device.serialNumber);
+    self.seekCamera = device;
 }
 
-- (void)seekCamera:(SeekMosaicCamera *)camera sentFrame:(UIImage *)frame {
+- (void)seekCamera:(SeekDevice *)camera sentFrame:(UIImage *)frame {
     
     dispatch_sync(dispatch_get_main_queue(), ^{
         

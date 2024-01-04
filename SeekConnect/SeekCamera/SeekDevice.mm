@@ -18,6 +18,7 @@ extern "C" {
 }
 #endif
 
+#import "tyrian_color_map.h"
 
 @interface SeekDevice () {
     
@@ -30,16 +31,12 @@ extern "C" {
     
     cv::Mat smoothing_accumulator;
     cv::Mat edge_accumulator;
-    cv::Mat root_accumulator;
     
     cv::Mat fsc_calibration_frame;
     cv::Mat gradient_correction_frame;
     cv::Mat sharpness_correction_frame;
     cv::Mat dead_pixel_mask;
     std::vector<cv::Point> dead_pixels;
-    
-    RGB_ColorMap tyrian_color_map[256];
-    RGB_ColorMap tyrian_rendered_frame[(S104SP_FRAME_WIDTH * 3) * (S104SP_FRAME_HEIGHT * 3)];
     
     float exposure_multiplier;
     
@@ -79,16 +76,18 @@ extern "C" {
         self.delegate = delegate;
         self.shutterMode = SeekCameraShutterModeAuto;
         
-        self.lockExposure = 1;
+        self.lockExposure = NO;
         self.exposureMinThreshold = -1;
         self.exposureMaxThreshold = -1;
         
         self.edgeDetection = NO;
         self.edgeDetectioneMinThreshold = 90;
         self.edgeDetectionMaxThreshold = 110;
+        self.performLastPassErosion = YES;
         
+        self.edgeDetectionPerimeterSize = 4;
         self.scaleFactor = 3;
-        self.blurFactor = 1.0;
+        self.blurFactor = 0;
         self.sharpenFactor = 0; //5
         self.opencvColormap = -1;
         
@@ -136,8 +135,6 @@ extern "C" {
         self->raw_transfer_frame = self->raw_transfer_frame(display_roi);
         
         pthread_mutex_unlock(&self->raw_transfer_frame_mutex);
-        
-        build_tyrian_like_color_map(tyrian_color_map);
     }
     
     return self;
@@ -228,36 +225,36 @@ extern "C" {
 }
 
 - (void)_reinitializeConnection {
-    
-    if (self->usb_camera_handle == NULL) {
-        debug_log("cannot reinitialize a non-existent connection\n");
-        [self _handleDeviceDisconnected];
-        return;
-    }
-        
-    libusb_device *usb_device = libusb_get_device(self->usb_camera_handle);
-    if (usb_device == NULL) {
-        debug_log("failed to get libusb_device for camera handle\n");
-        [self _handleDeviceDisconnected];
-        return;
-    }
-
-    debug_log("releasing interface and closing device handle\n");
-//    libusb_release_interface(self->usb_camera_handle, 0);
-    /*libusb_close*/(self->usb_camera_handle);
-//    self->usb_camera_handle = NULL;
-    
-    if (libusb_open(usb_device, &self->usb_camera_handle) != LIBUSB_SUCCESS) {
-        debug_log("libusb_open failed during reinitialization\n");
-        [self _handleDeviceDisconnected];
-        return;
-    }
-    
-    if ([self _attachToDeviceHandle:self->usb_camera_handle] != KERN_SUCCESS) {
-        debug_log("failed to complete reinitialization of device\n");
-        [self _handleDeviceDisconnected];
-        return;
-    }
+//    
+//    if (self->usb_camera_handle == NULL) {
+//        debug_log("cannot reinitialize a non-existent connection\n");
+//        [self _handleDeviceDisconnected];
+//        return;
+//    }
+//        
+//    libusb_device *usb_device = libusb_get_device(self->usb_camera_handle);
+//    if (usb_device == NULL) {
+//        debug_log("failed to get libusb_device for camera handle\n");
+//        [self _handleDeviceDisconnected];
+//        return;
+//    }
+//
+//    debug_log("releasing interface and closing device handle\n");
+////    libusb_release_interface(self->usb_camera_handle, 0);
+//    /*libusb_close*/(self->usb_camera_handle);
+////    self->usb_camera_handle = NULL;
+//    
+//    if (libusb_open(usb_device, &self->usb_camera_handle) != LIBUSB_SUCCESS) {
+//        debug_log("libusb_open failed during reinitialization\n");
+//        [self _handleDeviceDisconnected];
+//        return;
+//    }
+//    
+//    if ([self _attachToDeviceHandle:self->usb_camera_handle] != KERN_SUCCESS) {
+//        debug_log("failed to complete reinitialization of device\n");
+//        [self _handleDeviceDisconnected];
+//        return;
+//    }
     
     [self _initializeConnection];
 }
@@ -306,24 +303,6 @@ extern "C" {
                     break;
                 }
             }
-//            if ([self _transferFrameFromCamera] == LIBUSB_ERROR_NO_DEVICE) {
-//                
-//                // Connection lost
-//                debug_log("Lost connection to device\n");
-//                [self _handleDeviceDisconnected];
-//                break;
-//            }
-//            else if ([self _transferFrameFromCamera] != KERN_SUCCESS && self->tx_error_count >= 10) {
-//                
-//                debug_log("something seems wrong. attempting to reinitialize the session\n");
-//                
-//#if !(TARGET_OS_OSX)
-//                [self _killProcessesWithClaimsOnInterface];
-//#endif
-//
-//                [self _handleDeviceConnected];
-//                break;
-//            }
         }
         
         debug_log("frame_fetch_queue terminated\n");
@@ -338,7 +317,6 @@ extern "C" {
     }
     
     // Ask the device for an image
-    printf("asking for frame\n");
     kern_return_t ret;
     if ((ret = [self _requestFrameFromCamera]) != KERN_SUCCESS) {
         debug_log("failed to transfer frame from device\n");
@@ -354,11 +332,10 @@ extern "C" {
         uint32_t max_transfer_len = expected_transaction_len - total_bytes_transferred;
         int current_chunk_bytes_transferred = 0;
         
-        libusb_error transfer_status;
-        if ((transfer_status = (libusb_error)libusb_bulk_transfer(self->usb_camera_handle, 0x81, &transfer_buf[total_bytes_transferred], max_transfer_len, &current_chunk_bytes_transferred, 250)) != KERN_SUCCESS) {
-            debug_log("libusb_bulk_transfer failed after %d bytes out of %d: %s\n", total_bytes_transferred, expected_transaction_len, libusb_strerror(transfer_status));
+        if ((ret = libusb_bulk_transfer(self->usb_camera_handle, 0x81, &transfer_buf[total_bytes_transferred], max_transfer_len, &current_chunk_bytes_transferred, 250)) != KERN_SUCCESS) {
+            debug_log("libusb_bulk_transfer failed after %d bytes out of %d: %s\n", total_bytes_transferred, expected_transaction_len, libusb_strerror((libusb_error)ret));
             
-            return transfer_status;
+            return ret;
         }
         
         total_bytes_transferred += current_chunk_bytes_transferred;
@@ -424,7 +401,7 @@ extern "C" {
             
         case SEEK_FRAME_TYPE_FSC_CALIBRATION: {
             
-            debug_log("received flat scene correction frame\n");
+//            debug_log("received flat scene correction frame\n");
             self->raw_transfer_frame.copyTo(self->fsc_calibration_frame);
             self->fsc_calibration_frame = 0x4000 - self->fsc_calibration_frame;
             
@@ -474,19 +451,30 @@ extern "C" {
         default: {
             // Unhandled frame type
             debug_log("received unknown frame type: %d\n", self->raw_transfer_frame_buf[self.frameTypeFieldOffset]);
+            self->tx_error_count += 1;
+            
+            // Handle a case where a huge amount of unknown frame types have come in without ever seeing a valid one
+            if (self->tx_error_count >= 100) {
+                
+                self.frameCount = 0;
+                debug_log("data read issue? no valid frames coming through\n");
+                [self _performDeviceInitialization];
+                return;
+            }
+            
             break;
         }
     }
 }
 
-cv::Mat findPerimeter(const cv::Mat& binaryImage) {
+cv::Mat findPerimeter(const cv::Mat& binaryImage, int perimeter_kernel_size) {
     
     cv::Mat bwImage = binaryImage.clone();
     
     cv::medianBlur(bwImage, bwImage, 3); // Kernel size 3x3 -- / 2
     
     cv::Mat perimeter = cv::Mat::zeros(bwImage.size(), CV_8UC1);
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(8, 8));
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(perimeter_kernel_size, perimeter_kernel_size));
     
     cv::Mat dilated;
     cv::dilate(bwImage, dilated, kernel);
@@ -498,35 +486,19 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     return perimeter;
 }
 
-- (void)setAccum:(cv::Mat)mat {
-    self->root_accumulator = mat;
-}
-
 - (void)_processIngestedImageFrame {
     
     pthread_mutex_lock(&self->raw_transfer_frame_mutex);
     cv::Mat intermediary_frame;
     self->raw_transfer_frame.copyTo(intermediary_frame);
     pthread_mutex_unlock(&self->raw_transfer_frame_mutex);
-    
-    
+
     if (!self->fsc_calibration_frame.empty()) {
         intermediary_frame += self->fsc_calibration_frame;
     }
     
-    // if (!self->sharpness_correction_frame.empty()) {
-    //    self->image_tx_mat += self->sharpness_correction_frame;
-    //}
-    
-    /*
-     if (!self->gradient_correction_frame.empty()) {
-     debug_log("applying gradient correction\n");
-     self->image_tx_mat += self->gradient_correction_frame;
-     }
-     */
-    
     if (self->dead_pixel_mask.empty()) {
-        debug_log("processing image while without dead pixel correction\n");
+        debug_log("processing image while without dead pixel correction!\n");
     }
     else {
         // Apply dead pixel mask
@@ -540,76 +512,47 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     // TODO: Account for drift, or exclude pixels that were not corrected via DPC from influencing exposure
     intermediary_frame = intermediary_frame(cv::Rect(0, 4, 201, 150));
     
-    // Normalize to make use of full colorspace
-    if (self.lockExposure) {
-        
-
-//        if (self.exposureMinThreshold == -1) {
-            //            cv::minMaxLoc(intermediary_frame, &_exposureMinThreshold, &_exposureMaxThreshold);
-            //            self->exposure_multiplier = 65535.0 / (self.exposureMaxThreshold - self.exposureMinThreshold);
+    cv::Mat exposure_dead_pixel_mask = (intermediary_frame == 65535);
+    cv::Mat exposure_dead_pixel_corrected_frame;
+    cv::inpaint(intermediary_frame, exposure_dead_pixel_mask, exposure_dead_pixel_corrected_frame, 1, cv::INPAINT_TELEA);
+    
+    if (self.exposureMinThreshold == -1 || self.lockExposure == NO) {
+        cv::minMaxLoc(exposure_dead_pixel_corrected_frame, &_exposureMinThreshold, &_exposureMaxThreshold);
+        self->exposure_multiplier = 65535.0 / (self.exposureMaxThreshold - self.exposureMinThreshold);
+    }
+    
+    for (int y = 0; y < exposure_dead_pixel_corrected_frame.rows; y++) {
+        for (int x = 0; x < exposure_dead_pixel_corrected_frame.cols; x++) {
             
-            cv::Mat mask = (intermediary_frame == 65535);
-            
-            // Replace dead pixel values by interpolating from their neighbors
-            cv::Mat corrected_frame;
-            cv::inpaint(intermediary_frame, mask, corrected_frame, 1, cv::INPAINT_TELEA);
-            
-            // Proceed with your original method to calculate the min and max values
-            cv::minMaxLoc(corrected_frame, &_exposureMinThreshold, &_exposureMaxThreshold);
-            
-            self->exposure_multiplier = 65535.0 / (_exposureMaxThreshold - _exposureMinThreshold);
-//        }
-        
-        // Normalize the frame based on new thresholds
-        for (int y = 0; y < corrected_frame.rows; y++) {
-            for (int x = 0; x < corrected_frame.cols; x++) {
-                uint16_t val = corrected_frame.at<uint16_t>(y, x);
-                if (val > _exposureMaxThreshold) {
-                    val = 65535;
-                } else if (val < _exposureMinThreshold) {
-                    val = 0;
-                } else {
-                    val = (val - _exposureMinThreshold) * self->exposure_multiplier;
-                }
-                corrected_frame.at<uint16_t>(y, x) = val;
+            uint16_t pixel_value = exposure_dead_pixel_corrected_frame.at<uint16_t>(y, x);
+            if (pixel_value > self.exposureMaxThreshold) {
+                pixel_value = 65535;
             }
-        }
+            else if (pixel_value < self.exposureMinThreshold) {
+                pixel_value = 0;
+            }
+            else {
+                pixel_value = (pixel_value - self.exposureMinThreshold) * self->exposure_multiplier;
+            }
 
-            // Replace the original frame with the corrected frame for further processing
-            intermediary_frame = corrected_frame;
-    
-        // basic
-//        for (int y = 0; y < intermediary_frame.rows; y++) {
-//            
-//            for (int x = 0; x < intermediary_frame.cols; x++) {
-//                uint16_t val = intermediary_frame.at<uint16_t>(y, x);
-//                if (val > self.exposureMaxThreshold) {
-//                    val = 65535;
-//                } else if (val < self.exposureMinThreshold) {
-//                    val = 0;
-//                } else {
-//                    val = (val - self.exposureMinThreshold) * self->exposure_multiplier;
-//                }
-//                intermediary_frame.at<uint16_t>(y, x) = val;
-//            }
-//        }
-        
-        // The first frame min value may be 0. If so, reset it so that
-        // min/max is recalculated on the next frame
-        if (self.exposureMinThreshold == 0) {
-            self.exposureMinThreshold = -1;
+            exposure_dead_pixel_corrected_frame.at<uint16_t>(y, x) = pixel_value;
         }
     }
-    else {
-        cv::normalize(intermediary_frame, intermediary_frame, 0, 65535, cv::NORM_MINMAX);
-    }
     
+    intermediary_frame = exposure_dead_pixel_corrected_frame;
+    
+    // The first frame min value may be 0. If so, reset it so that
+    // min/max is recalculated on the next frame
+    if (self.exposureMinThreshold == 0) {
+        self.exposureMinThreshold = -1;
+    }
+
     // Convert to 1 channel grayscale
     cv::Mat frame_one_channel;
     intermediary_frame.convertTo(frame_one_channel, CV_8UC1, 1.0 / 256.0);
     
-    [self _applyTemporalSmoothingToFrame:frame_one_channel usingAccumulator:self->smoothing_accumulator alpha:0.90];
-    //    [self _applyTemporalSmoothingToFrame:frame_one_channel usingAccumulator:self->root_accumulator alpha:0.50];
+    
+//    [self _applySmoothingToFrame:frame_one_channel usingAccumulator:self->smoothing_accumulator alpha:0.50];
     
     cv::Mat frame_three_channel;
     
@@ -626,40 +569,24 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
         frame_one_channel.copyTo(frame_three_channel);
     }
     
-    //    int x = 40;
-    //   int y = 1;
-    //   int width = 160;
-    //   int height = 153;
-    //
-    //   cv::Point top_left(x, y);
-    //   cv::Point bottom_right(x + width, y + height);
-    //
-    //   // Define the color of the rectangle (B, G, R) - red in this case
-    //   cv::Scalar rectangle_color(0, 0, 255); // Red color
-    //
-    //   // Define the thickness of the border.
-    //   // If you set it to CV_FILLED, the rectangle will be filled.
-    //   int thickness = 2; // Change this for a thicker or thinner border
-    //
-    //   // Draw the rectangle on the image
-    //   cv::rectangle(frame_three_channel, top_left, bottom_right, rectangle_color, thickness);
-    
-    
     // Adjust size
     cv::resize(frame_three_channel, frame_three_channel, cv::Size(), self.scaleFactor, self.scaleFactor, cv::INTER_LINEAR);
     
     // Edge detection
+    cv::Mat erosion_kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(4, 4));
     if (self.edgeDetection) {
         
         cv::Mat edge_detect_blur_one_channel;
-        cv::resize(frame_one_channel, edge_detect_blur_one_channel, cv::Size(), self.scaleFactor, self.scaleFactor, cv::INTER_LINEAR);
-        cv::GaussianBlur(edge_detect_blur_one_channel, edge_detect_blur_one_channel, cv::Size(1, 1), 0);
+        cv::morphologyEx(frame_one_channel, edge_detect_blur_one_channel, cv::MORPH_ERODE, erosion_kernel);
         
-        cv::Mat edges = findPerimeter(edge_detect_blur_one_channel);
+        cv::resize(edge_detect_blur_one_channel, edge_detect_blur_one_channel, cv::Size(), self.scaleFactor, self.scaleFactor, cv::INTER_LINEAR);
+        cv::GaussianBlur(edge_detect_blur_one_channel, edge_detect_blur_one_channel, cv::Size(3, 3), 0);
+
+        cv::Mat edges = findPerimeter(edge_detect_blur_one_channel, self.edgeDetectionPerimeterSize);
         cv::Mat edgeOverlay = cv::Mat::zeros(edges.size(), edges.type());
         edges.copyTo(edgeOverlay, edges);
         
-        [self _applyTemporalSmoothingToFrame:edgeOverlay usingAccumulator:self->edge_accumulator alpha:0.90];
+        [self _applySmoothingToFrame:edgeOverlay usingAccumulator:self->edge_accumulator alpha:0.90];
         cv::addWeighted(frame_three_channel, 1, edgeOverlay, 0.90, 0, frame_three_channel);
     }
     
@@ -675,29 +602,23 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
         cv::filter2D(frame_three_channel, frame_three_channel, -1, kernel);
     }
     
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-    cv::morphologyEx(frame_three_channel, frame_three_channel, cv::MORPH_ERODE, kernel);
+    if (self.performLastPassErosion) {
+        cv::morphologyEx(frame_three_channel, frame_three_channel, cv::MORPH_ERODE, erosion_kernel);
+    }
     
     // Apply color map
     if (self.opencvColormap >= 0) {
         
         // User specified an opencv colormap
         cv::applyColorMap(frame_three_channel, frame_three_channel, self.opencvColormap);
-        
-        // Send processed frame to delegate
-        [self.delegate seekCamera:self sentFrame:[self _imageFromPixelData:frame_three_channel.data width:frame_three_channel.cols height:frame_three_channel.rows]];
     }
     else {
-        
         // No colormap specified, use one that is similar to Seek's Tyrian colormmap
-        for (int i = 0; i < frame_three_channel.rows * frame_three_channel.cols; i++) {
-            uint8_t pixelValue = frame_three_channel.data[i];
-            tyrian_rendered_frame[i] = tyrian_color_map[pixelValue];
-        }
-        
-        // Send processed frame to delegate
-        [self.delegate seekCamera:self sentFrame:[self _imageFromPixelData:(unsigned char *)tyrian_rendered_frame width:frame_three_channel.cols height:frame_three_channel.rows]];
+        cv::applyColorMap(frame_three_channel, frame_three_channel, tyrian_color_map());
     }
+
+    // Send processed frame to delegate
+    [self.delegate seekCamera:self sentFrame:[self _imageFromPixelData:frame_three_channel.data width:frame_three_channel.cols height:frame_three_channel.rows]];
 }
 
 - (id)_imageFromPixelData:(unsigned char *)source width:(int)width height:(int)height {
@@ -818,7 +739,7 @@ cv::Mat findPerimeter(const cv::Mat& binaryImage) {
     return div ? value / div : 0;
 }
 
-- (void)_applyTemporalSmoothingToFrame:(const cv::Mat&)frame usingAccumulator:(cv::Mat&)accumulator alpha:(double)alpha {
+- (void)_applySmoothingToFrame:(const cv::Mat&)frame usingAccumulator:(cv::Mat&)accumulator alpha:(double)alpha {
     
     if (accumulator.empty()) {
         frame.convertTo(accumulator, CV_32F);

@@ -21,16 +21,22 @@
 
 @end
 
-void usb_callback_s104sp(libusb_context *ctx, libusb_device *usb_device, libusb_hotplug_event event, void *user_data) {
+static int usb_callback_s104sp(libusb_context *ctx, libusb_device *usb_device, libusb_hotplug_event event, void *user_data) {
+    
+    if ((event & LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) == 0) {
+        return 0;
+    }
     
     debug_log("discoverer found a new s104sp device %p\n", usb_device);
     [[SeekDeviceDiscovery discoverer] _handleCallbackForS104SP:usb_device];
+    
+    return 0;
 }
 
 @implementation SeekDeviceDiscovery
 
 - (id)init {
-
+    
     [[NSException exceptionWithName:@"SeekDeviceDiscovery" reason:@"Use +discoverer intead of -init" userInfo:nil] raise];
     return nil;
 }
@@ -59,7 +65,6 @@ void usb_callback_s104sp(libusb_context *ctx, libusb_device *usb_device, libusb_
         self->device_discovery_queue = dispatch_queue_create("com.ea.device.finder", 0);
         self.isDiscovering = NO;
         
-        
         if (libusb_init(&libusb_ctx) < 0) {
             debug_log("libusb_init context failed\n");
             return nil;
@@ -68,7 +73,6 @@ void usb_callback_s104sp(libusb_context *ctx, libusb_device *usb_device, libusb_
     
     return self;
 }
-
 
 - (void)addDiscoveryHandler:(void (^)(SeekDevice *device))discoveryHandler {
     
@@ -82,7 +86,16 @@ void usb_callback_s104sp(libusb_context *ctx, libusb_device *usb_device, libusb_
     }
     
     self.isDiscovering = YES;
-    libusb_hotplug_register_callback(self->libusb_ctx, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED, LIBUSB_HOTPLUG_ENUMERATE, S104SP_USB_VENDOR_ID, S104SP_USB_PRODUCT_ID, LIBUSB_HOTPLUG_MATCH_ANY, (libusb_hotplug_callback_fn)usb_callback_s104sp, NULL, NULL);
+    
+    dispatch_async(self->device_discovery_queue, ^{
+        
+        libusb_hotplug_register_callback(self->libusb_ctx, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED, LIBUSB_HOTPLUG_ENUMERATE, SEEK_USB_VENDOR_ID, SEEK_S104SP_USB_PRODUCT_ID, LIBUSB_HOTPLUG_MATCH_ANY, (libusb_hotplug_callback_fn)usb_callback_s104sp, NULL, NULL);
+        while (self.isDiscovering && libusb_handle_events(NULL) == LIBUSB_SUCCESS) {
+            continue;
+        }
+        
+        debug_log("device discovery queue terminated\n");
+    });
 }
 
 - (void)stopDiscovery {

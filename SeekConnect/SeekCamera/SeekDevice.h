@@ -5,7 +5,6 @@
 //  Created by Ethan Arbuckle
 //
 
-#import <opencv2/opencv.hpp>
 #import <Foundation/Foundation.h>
 #import <libusb.h>
 
@@ -34,7 +33,7 @@ typedef NS_ENUM(NSUInteger, SeekCameraShutterMode) {
 @property (nonatomic) SeekCameraShutterMode shutterMode;
 
 @property (nonatomic) float scaleFactor;
-@property (nonatomic) float blurFactor;
+@property (nonatomic) int blurFactor;
 @property (nonatomic) float sharpenFactor;
 @property (nonatomic) int opencvColormap;
 
@@ -43,14 +42,15 @@ typedef NS_ENUM(NSUInteger, SeekCameraShutterMode) {
 @property (nonatomic) double exposureMaxThreshold;
 
 @property (nonatomic) BOOL edgeDetection;
+@property (nonatomic) BOOL performLastPassErosion;
 @property (nonatomic) double edgeDetectioneMinThreshold;
 @property (nonatomic) double edgeDetectionMaxThreshold;
+@property (nonatomic) int edgeDetectionPerimeterSize;
 
-- (id)initWithHandle:(libusb_device_handle *)dev delegate:(id<SeekDeviceDelegate>)delegate;
+- (id)initWithDeviceHandle:(libusb_device_handle *)device_handle delegate:(id<SeekDeviceDelegate>)delegate;
 - (void)start;
 - (void)toggleShutter;
 - (void)resetExposureThresholds;
-- (void)setAccum:(cv::Mat)mat;
 - (kern_return_t)_requestFrameFromCamera;
 
 @end
